@@ -1,15 +1,6 @@
 # micro21cm
 model-independent constraints on reionization from observations of the 21-cm background
 
-
-
-igm_ion = micro21cm.BubbleModel(bubbles_ion=True)
-
-# Make an easy plot
-kw = {'k': np.logspace(-1, 0, 21), 'Ts': 3., 'Q': 0.5}
-fig1, axes1 = micro21cm.plot_ps(model=igm_ion, model_kwargs=kw, data=hera_dr1)
-
-
 ## Quick Example
 
 To plot a simple bubble model for the 21-cm power spectrum, you can do something
@@ -30,8 +21,12 @@ ps = model.get_ps_21cm(z=8., k=k, Ts=3., Q=0.5, R_b=3., sigma_b=0.3)
 
 # Plot dimensionless power spectrum
 pl.loglog(k, k**3 * ps / 2. / np.pi**2)
+```
 
-# Some built-in routines will plot things nicely, optionally with data.
+Some built-in routines will plot things nicely, optionally with data, e.g.,
+
+```python
+# kwargs for the model
 kw = {'z': 8., 'k': k, 'Ts': 3., 'Q': 0.5, 'R_b': 3., 'sigma_b': 0.3}
 
 # Some made-up data

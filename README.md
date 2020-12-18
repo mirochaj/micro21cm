@@ -31,7 +31,7 @@ kw = {'z': 8., 'k': k, 'Ts': 3., 'Q': 0.5, 'R_b': 3., 'sigma_b': 0.3}
 
 # Some made-up data
 data = {8.: {'k': np.array([0.1, 0.2]),
-              'D_sq': np.array([1e3, 2e3]), 'err': np.array([2e2, 2e2])}}
+    'D_sq': np.array([1e3, 2e3]), 'err': np.array([2e2, 2e2])}}
 
 # Plot nicely.
 fig, axes = micro21cm.plot_ps(model=model, model_kwargs=kw, data=data,

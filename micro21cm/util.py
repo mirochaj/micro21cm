@@ -22,6 +22,7 @@ except ImportError:
 
 labels = \
 {
+ 'R': r'$R / [h^{-1} \ \mathrm{Mpc}]$',
  'k': r'$k / [h \ \mathrm{cMpc}^{-1}]$',
  'pofk': r'$P(k)$',
  'delta_sq': r'$\Delta^2(k) \ [\mathrm{mK}^2]$',

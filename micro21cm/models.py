@@ -41,7 +41,9 @@ class BubbleModel(object):
         bubbles_pdf : str
             Bubble size distribution. Will get normalized to volume-filling
             fraction Q automatically. Current options: 'lognormal' and
-            'plexp'.
+            'plexp'. The two parameters Rb and sigma_b characterize the PDF, and are
+            the avg and rms of radii for 'lognormal'. For 'plexp' Rb is the critical
+            radius, and sigma_b is a power-law index added to the usual 3.
 
         Array Setup
         -----------
@@ -145,7 +147,7 @@ class BubbleModel(object):
             logRb = np.log(R_b)
             n_b = np.exp(-(logRarr - logRb)**2 / 2. / sigma_b**2)
         elif self.bubbles_pdf == 'plexp':
-            n_b = (self.tab_R / R_b)**sigma_b * np.exp(-self.tab_R / R_b)
+            n_b = (self.tab_R / R_b)**(3.0+sigma_b) * np.exp(-self.tab_R / R_b)
         else:
             raise NotImplemented("Unrecognized `bubbles_pdf`: {}".format(
                 self.bubbles_pdf))

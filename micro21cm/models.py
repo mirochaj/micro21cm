@@ -12,6 +12,9 @@ Description:
 
 import camb
 import numpy as np
+import powerbox as pbox
+from scipy.spatial import cKDTree
+from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
 from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar
 
@@ -157,6 +160,23 @@ class BubbleModel(object):
 
         return n_b
 
+    def get_bsd_cdf(self, Q=0.5, R_b=5., sigma_b=0.1):
+        """
+        Compute the cumulative distribution function for the bubble size dist.
+        """
+
+        pdf = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b)
+        cdf = cumtrapz(pdf * self.tab_R, x=np.log(self.tab_R), initial=0.0)
+
+        return cdf / cdf[-1]
+
+    def get_nb(self, Q=0.5, R_b=5., sigma_b=0.1):
+        """
+        Compute the number density of bubbles [(h / Mpc)^3].
+        """
+        pdf = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b)
+        return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
+
     def get_P1(self, d, Q=0.5, R_b=5., sigma_b=0.1):
         """
         Compute 1 bubble term.
@@ -253,6 +273,7 @@ class BubbleModel(object):
         .. note :: Will cache for given redshift `z` to save time.
 
         """
+
         if not hasattr(self, '_cache_dd_'):
             self._cache_dd_ = {}
 
@@ -341,3 +362,98 @@ class BubbleModel(object):
                 Rmax=self.tab_R.max())
 
         return ps_21
+
+    def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.5, Ts=np.inf, R_b=5.,
+        sigma_b=0.1, beta=1., use_kdtree=True, include_rho=True):
+        """
+        Make a 3-d realization representative of this model.
+
+        .. note :: This just draws bubbles from the desired bubble size
+            distribution and positions them randomly in a box.
+
+        Parameters
+        ----------
+        z : int, float
+            Redshift of interest.
+        Lbox : int, float
+            Linear dimension of box to 'simulate' in [cMpc / h].
+        vox : int, float
+            Linear dimension of voxels in [cMpc / h].
+        use_kdtree : bool
+            If True, uses kdtree to speed-up placement of bubbles in volume.
+        include_rho : bool
+            If True, use Steven Murray's powerbox package to generate a 3-D
+            realization of the density field and multiply box by (1 + delta).
+
+        Returns
+        -------
+        A tuple containing (box of ones and zeros, density box, 21-cm box),
+        each of which are a 3-d array with dimensions [Lbox / vox]*3.
+
+        """
+
+        Npix = int(Lbox / vox)
+        pdf = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b)
+        cdf = self.get_bsd_cdf(Q=Q, R_b=R_b, sigma_b=sigma_b)
+        num_per_vol = self.get_nb(Q=Q, R_b=R_b, sigma_b=sigma_b)
+
+        num = int(num_per_vol * Lbox**3)
+
+        bins = np.arange(0, Lbox+vox, vox)
+        binc = np.arange(0.5*vox, Lbox, vox)
+
+        xx, yy, zz = np.meshgrid(binc, binc, binc)
+
+        # Randomly generate `num` bubbles with sizes drawn from BSD.
+        n = np.random.rand(num)
+        R = np.exp(np.interp(np.log(n), np.log(cdf), np.log(self.tab_R)))
+
+        # Randomly generate (x, y, z) positions for all bubbles
+        p_len = np.random.rand(num*3).reshape(num, 3) * Lbox
+        # Get bubble positions in terms of array indices
+        p_bin = np.digitize(p_len, bins) - 1
+
+        # Initialize a box. We'll zero-out elements lying within bubbles below.
+        box = np.ones([binc.size]*3)
+
+        # Can speed things up with a kdtree if you want.
+        if use_kdtree:
+            pos = np.array([xx.ravel(), yy.ravel(), zz.ravel()]).T
+            kdtree = cKDTree(pos, boxsize=Lbox)
+
+        # Loop over bubbles and flag all cells within them
+        for h in range(p_bin.shape[0]):
+
+            # Brute force
+            if not use_kdtree:
+                i, j, k = p_bin[h]
+                dr = np.sqrt((xx - xx[i,j,k])**2 + (yy - yy[i,j,k])**2 \
+                   + (zz - zz[i,j,k])**2)
+                in_bubble = dr <= R[h]
+                box[in_bubble] = 0
+                continue
+
+            # Spee-up with kdtree
+            p = p_bin[h]
+
+            # `nearby` are indices in `pos`, i.e., not (i, j, k) indices
+            d, nearby = kdtree.query(p, k=1e4, distance_upper_bound=R_b * 10)
+
+            in_bubble = d <= R[h]
+            for elem in nearby[in_bubble==True]:
+                a, b, c = pos[elem]
+                i, j, k = np.digitize([a, b, c], bins) - 1
+                box[i,j,k] = 0
+
+        # Set bulk IGM temperature
+        dTb = box * self.get_dTb_bulk(z, Ts=Ts)
+
+        if include_rho:
+            power = lambda k: self.get_ps_matter(z=z, k=k)
+            rho = pbox.LogNormalPowerBox(N=Npix, dim=3, pk=power,
+                boxlength=Lbox).delta_x()
+            dTb *= (1. + rho)
+        else:
+            rho = None
+
+        return box, rho, dTb

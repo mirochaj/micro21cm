@@ -1,6 +1,10 @@
 # micro21cm
 model-independent constraints on reionization from observations of the 21-cm background
 
+## Dependencies
+
+You'll need `numpy`, `matplotlib`, `scipy`, `camb`, and `powerbox`.
+
 ## Quick Example
 
 To plot a simple bubble model for the 21-cm power spectrum, you can do something

@@ -18,6 +18,9 @@ _default_modes = np.logspace(-1, 0., 21)
 _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
 
+def read_mcmc():
+    pass
+
 def plot_ps(model=None, data=None, ax=None, fig=None, dimensionless=True,
     data_kwargs={}, model_kwargs={}, fig_kwargs={}, z=None, **kwargs):
     """

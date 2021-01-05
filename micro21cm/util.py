@@ -117,3 +117,40 @@ class ProgressBar(object):
     def finish(self):
         if self.has_pb:
             self.pbar.finish()
+
+
+
+
+def get_cmd_line_kwargs(argv):
+
+    cmd_line_kwargs = {}
+
+    for arg in argv[1:]:
+        try:
+            pre, post = arg.split('=')
+        except ValueError:
+            # To deal with parameter values that have an '=' in them.
+            pre = arg[0:arg.find('=')]
+            post = arg[arg.find('=')+1:]
+
+        # Need to do some type-casting
+        if post.isdigit():
+            cmd_line_kwargs[pre] = int(post)
+        elif post.isalpha():
+            if post == 'None':
+                cmd_line_kwargs[pre] = None
+            elif post in ['True', 'False']:
+                cmd_line_kwargs[pre] = True if post == 'True' else False
+            else:
+                cmd_line_kwargs[pre] = str(post)
+        elif post[0] == '[':
+            vals = post[1:-1].split(',')
+            cmd_line_kwargs[pre] = np.array([float(val) for val in vals])
+        else:
+            try:
+                cmd_line_kwargs[pre] = float(post)
+            except ValueError:
+                # strings with underscores will return False from isalpha
+                cmd_line_kwargs[pre] = str(post)
+
+    return cmd_line_kwargs

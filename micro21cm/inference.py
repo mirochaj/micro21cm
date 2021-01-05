@@ -10,8 +10,10 @@ Description:
 
 """
 
+import os
 import time
 import emcee
+import pickle
 import numpy as np
 from scipy.special import erf
 
@@ -161,9 +163,10 @@ class FitMCMC(object):
 
         return pos
 
-    def run_fit(self, steps=100, nwalkers=64, nthreads=1):
+    def run_fit(self, steps=100, nwalkers=64, nthreads=1, prefix=None,
+        restart=False):
         """
-        Run emcee. Note that the redshift of interest is hard-coded above. Change that sometime.
+        Run emcee.
         """
 
         args = [self.model, self.data, self.kblobs, self.invert_logL,
@@ -171,11 +174,39 @@ class FitMCMC(object):
 
         Nparams = len(self.model.params)
 
-        sampler = emcee.EnsembleSampler(nwalkers, Nparams, loglikelihood,
-            threads=nthreads, args=args)
+        ##
+        # Check for previous output
+        pos = None
+        data_pre = None
+        if prefix is not None:
+            fn = prefix + '.pkl'
+            if os.path.exists(fn):
+                f = open(fn, 'rb')
+                data_pre = pickle.load(f)
+                f.close()
+
+                nwalkers_p, steps_p, pars_p = data_pre['chain'].shape
+
+                warning = 'Number of walkers must match to enable restart!'
+                warning += 'Previous run ({}) used {}'.format(fn, nwalkers_p)
+                assert nwalkers_p == nwalkers, warning
+
+                print("# Restarting from output {}.".format(fn))
+                print("# Will augment {} samples there with {} more.".format(
+                    steps_p, steps
+                ))
+
+                # Set initial walker positions
+                pos = data_pre['chain'][:,-1,:]
+
+                # Or, use sample_ball to re-initialize
 
         # Initial guesses for four parameters: R_b, sigma_b, Q, Ts
-        pos = self.get_initial_walker_pos(nwalkers)
+        if pos is None:
+            pos = self.get_initial_walker_pos(nwalkers)
+
+        sampler = emcee.EnsembleSampler(nwalkers, Nparams, loglikelihood,
+            threads=nthreads, args=args)
 
         print("# Starting MCMC at {}".format(time.ctime()))
 
@@ -185,5 +216,23 @@ class FitMCMC(object):
 
         print("# Ran MCMC for {} steps ({:.1f} minutes).".format(steps,
             (t2 - t1) / 60.))
+
+        ##
+        # Optionally save
+        if prefix is not None:
+
+            if data_pre is not None:
+                chain = data_pre['chain']
+                fchain = data_pre['flatchain']
+
+                data = {'chain': np.concatenate((chain, sampler.chain), axis=1),
+                    'flatchain': np.concatenate((fchain, sampler.flatchain))}
+            else:
+                data = {'chain': sampler.chain, 'flatchain': sampler.flatchain}
+
+            with open(fn, 'wb') as f:
+                pickle.dump(data, f)
+
+            print("# Wrote {}.".format(fn))
 
         return sampler

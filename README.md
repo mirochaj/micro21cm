@@ -3,7 +3,7 @@ model-independent constraints on reionization from observations of the 21-cm bac
 
 ## Dependencies
 
-You'll need `numpy`, `matplotlib`, `scipy`, `camb`, and `powerbox`.
+You'll need `numpy`, `matplotlib`, `scipy`, `camb`, and `powerbox`. If you want to run fits, you'll need `emcee`, and if you want to do so in parallel, you'll need `mpi4py` and `schwimmbad` for MPI parallelism. Alternatively, you can use `multiprocessing` on shared memory machines.
 
 ## Quick Example
 

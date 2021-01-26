@@ -11,11 +11,23 @@ Description:
 """
 
 import os
+import sys
 import time
 import emcee
 import pickle
 import numpy as np
 from scipy.special import erf
+
+try:
+    from mpi4py import MPI
+    rank = MPI.COMM_WORLD.rank
+    size = MPI.COMM_WORLD.size
+    from schwimmbad import MPIPool
+    have_mpi = True
+except ImportError:
+    rank = 0
+    size = 1
+    have_mpi = False
 
 _default_priors = \
 {
@@ -71,7 +83,7 @@ def loglikelihood(pars, *args):
     Nz = len(data.keys())
     zdata = np.sort(list(data.keys()))
 
-    if zdata.size > 1:
+    if zdata.size > 1 and rank == 0:
         print("WARNING: multi-z fits aren't worthwhile at this stage.")
 
     if kblobs is not None:
@@ -174,13 +186,24 @@ class FitMCMC(object):
 
         Nparams = len(self.model.params)
 
+        if (nthreads == 1) and (size > 1):
+            print("% WARNING: Not sure MPIPool works yet.")
+
+            pool = MPIPool()
+
+            if not pool.is_master():
+                pool.wait()
+                sys.exit(0)
+        else:
+            pool = None
+
         ##
         # Check for previous output
         pos = None
         data_pre = None
         if prefix is not None:
             fn = prefix + '.pkl'
-            if os.path.exists(fn):
+            if os.path.exists(fn) and restart:
                 f = open(fn, 'rb')
                 data_pre = pickle.load(f)
                 f.close()
@@ -191,8 +214,8 @@ class FitMCMC(object):
                 warning += 'Previous run ({}) used {}'.format(fn, nwalkers_p)
                 assert nwalkers_p == nwalkers, warning
 
-                print("# Restarting from output {}.".format(fn))
-                print("# Will augment {} samples there with {} more.".format(
+                print("% Restarting from output {}.".format(fn))
+                print("% Will augment {} samples there with {} more.".format(
                     steps_p, steps
                 ))
 
@@ -206,16 +229,19 @@ class FitMCMC(object):
             pos = self.get_initial_walker_pos(nwalkers)
 
         sampler = emcee.EnsembleSampler(nwalkers, Nparams, loglikelihood,
-            threads=nthreads, args=args)
+            threads=nthreads, args=args, pool=pool)
 
-        print("# Starting MCMC at {}".format(time.ctime()))
+        print("% Starting MCMC at {}".format(time.ctime()))
 
         t1 = time.time()
         results = sampler.run_mcmc(pos, steps)
         t2 = time.time()
 
-        print("# Ran MCMC for {} steps ({:.1f} minutes).".format(steps,
+        print("% Ran MCMC for {} steps ({:.1f} minutes).".format(steps,
             (t2 - t1) / 60.))
+
+        if pool is not None:
+            pool.close()    
 
         ##
         # Optionally save
@@ -233,6 +259,6 @@ class FitMCMC(object):
             with open(fn, 'wb') as f:
                 pickle.dump(data, f)
 
-            print("# Wrote {}.".format(fn))
+            print("% Wrote {}.".format(fn))
 
         return sampler

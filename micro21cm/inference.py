@@ -23,11 +23,9 @@ try:
     rank = MPI.COMM_WORLD.rank
     size = MPI.COMM_WORLD.size
     from schwimmbad import MPIPool
-    have_mpi = True
 except ImportError:
     rank = 0
     size = 1
-    have_mpi = False
 
 _default_priors = \
 {
@@ -44,96 +42,6 @@ _default_guesses = \
  'R_b': (1., 5.),
  'sigma_b': (0.15, 0.3),
 }
-
-def _get_ps(z, k, model, **kwargs):
-    ps_21 = model.get_ps_21cm(z=z, k=k, **kwargs)
-    D_21 = ps_21 * k**3 / 2. / np.pi**2
-    return D_21
-
-def likelihood(data, model, err, limits, invert):
-
-    if limits:
-        # Likelihood for upper limit with unknown systematic
-        if invert:
-            _l_ = -1. * (data - model) / np.sqrt(2.) / err
-        else:
-            _l_ = (data - model) / np.sqrt(2.) / err
-
-        L = 0.5 * np.sqrt(np.pi) * (1. + erf(_l_))
-    else:
-        raise NotImplemented('Only dealing with upper limits so far.')
-        #lnL = -0.5 * (np.sum((ymod - ydat)**2 \
-        #        / yerr**2 + np.log(2. * np.pi * yerr**2)))
-
-    return L
-
-def loglikelihood(pars, *args):
-    """
-    Assumes parameter ordering is: R_b, sigma_b, Q, Ts
-    Assumes args ordering is: ion or heat, k modes, invert likelihood
-
-    """
-
-    model, data, kblobs, invert, priors = args
-
-    pars_dict = {}
-    for i, par in enumerate(model.params):
-        pars_dict[par] = pars[i]
-
-    Nz = len(data.keys())
-    zdata = np.sort(list(data.keys()))
-
-    if zdata.size > 1 and rank == 0:
-        print("WARNING: multi-z fits aren't worthwhile at this stage.")
-
-    if kblobs is not None:
-        blobs_buff = -np.inf * np.ones((zdata.size, len(kblobs)))
-    else:
-        blobs_buff = {}
-
-    # Hard-coded priors (sorry)
-    for par in model.params:
-        if not (priors[par][0] <= pars_dict[par] <= priors[par][1]):
-            return -np.inf, blobs_buff
-
-    ##
-    # Enforce priors
-    for par in pars:
-        if par < 0:
-            return -np.inf, blobs_buff
-
-    # Loop over contents of `data`
-    L = []
-    blobs = blobs_buff.copy()
-    for i, z in enumerate(zdata):
-        _data = data[z]
-        _kdat = _data['k']
-
-        ymod = _get_ps(z, _kdat, model, **pars_dict)
-        ydat = _data['D_sq']
-        yerr = _data['err']
-
-        # Standard likelihood
-        #lnL = -0.5 * (np.sum((ymod - ydat)**2 \
-        #        / yerr**2 + np.log(2. * np.pi * yerr**2)))
-
-        # Likelihood for upper limit with unknown systematic
-        #if invert:
-        #    _l_ = -1. * (ydat - ymod) / np.sqrt(2.) / yerr
-        #else:
-        #    _l_ = (ydat - ymod) / np.sqrt(2.) / yerr
-
-        _l_ = likelihood(ydat, ymod, yerr, True, invert)
-
-        if kblobs is not None:
-            blobs[i,:] = _get_ps(z, kblobs, model, **pars_dict)
-
-        L.extend(0.5 * np.sqrt(np.pi) * (1. + erf(_l_)))
-
-    lnL = np.sum(np.log(L))
-
-    return lnL, blobs
-
 
 class DummyEnsembleSampler(object):
     def __init__(self):
@@ -160,6 +68,13 @@ class FitMCMC(object):
         assert 'k' not in self.data.keys(), \
             "Format of `data` should be dict of dicts (one per redshift)."
 
+        if size > 1:
+            mpi_err = "Not really setup for MPI parallelism."
+            mpi_err += ' Having likelihood embedded in FitMCMC class causes'
+            mpi_err += ' slowdown related to pickling/unpickling.'
+            mpi_err += ' Use stand-alone script for MPI runs.'
+            raise ValueError(mpi_err)
+
     @property
     def priors(self):
         if not hasattr(self, '_priors'):
@@ -175,6 +90,101 @@ class FitMCMC(object):
 
         return pos
 
+    def _get_ps(self, z, k, **kwargs):
+        ps_21 = self.model.get_ps_21cm(z=z, k=k, **kwargs)
+        D_21 = ps_21 * k**3 / 2. / np.pi**2
+        return D_21
+
+    def likelihood(self, data, model, err):
+        limits = True
+        if limits:
+            # Likelihood for upper limit with unknown systematic
+            if self.invert_logL:
+                _l_ = -1. * (data - model) / np.sqrt(2.) / err
+            else:
+                _l_ = (data - model) / np.sqrt(2.) / err
+
+            L = 0.5 * np.sqrt(np.pi) * (1. + erf(_l_))
+        else:
+            raise NotImplemented('Only dealing with upper limits so far.')
+            #lnL = -0.5 * (np.sum((ymod - ydat)**2 \
+            #        / yerr**2 + np.log(2. * np.pi * yerr**2)))
+
+        return L
+
+    def loglikelihood(self, pars):
+        """
+        Assumes parameter ordering is: R_b, sigma_b, Q, Ts
+        Assumes args ordering is: ion or heat, k modes, invert likelihood
+
+        """
+
+        pars_dict = {}
+        for i, par in enumerate(self.model.params):
+            pars_dict[par] = pars[i]
+
+        Nz = len(self.data.keys())
+        zdata = np.sort(list(self.data.keys()))
+
+        if zdata.size > 1 and rank == 0:
+            print("WARNING: multi-z fits aren't worthwhile at this stage.")
+
+        if self.kblobs is not None:
+            blobs_buff = -np.inf * np.ones((zdata.size, len(self.kblobs)))
+        else:
+            blobs_buff = {}
+
+        # Hard-coded priors (sorry)
+        for par in self.model.params:
+            if not (self.priors[par][0] <= pars_dict[par] <= self.priors[par][1]):
+                return -np.inf, blobs_buff
+
+        ##
+        # Enforce priors
+        for par in pars:
+            if par < 0:
+                return -np.inf, blobs_buff
+
+        # Loop over contents of `data`
+        L = []
+        blobs = blobs_buff.copy()
+        for i, z in enumerate(zdata):
+            _data = self.data[z]
+            _kdat = _data['k']
+
+            t1 = time.time()
+            ymod = self._get_ps(z, _kdat, **pars_dict)
+            t2 = time.time()
+
+            print("proc {} likelihood eval: {:.2f} sec".format(rank, t2 - t1))
+
+
+            ydat = _data['D_sq']
+            yerr = _data['err']
+
+            # Standard likelihood
+            #lnL = -0.5 * (np.sum((ymod - ydat)**2 \
+            #        / yerr**2 + np.log(2. * np.pi * yerr**2)))
+
+            # Likelihood for upper limit with unknown systematic
+            #if invert:
+            #    _l_ = -1. * (ydat - ymod) / np.sqrt(2.) / yerr
+            #else:
+            #    _l_ = (ydat - ymod) / np.sqrt(2.) / yerr
+
+
+            _l_ = self.likelihood(ydat, ymod, yerr)
+
+            if self.kblobs is not None:
+                blobs[i,:] = self._get_ps(z, kblobs, **pars_dict)
+
+            L.extend(0.5 * np.sqrt(np.pi) * (1. + erf(_l_)))
+
+        lnL = np.sum(np.log(L))
+
+        return lnL, blobs
+
+
     def run_fit(self, steps=100, nwalkers=64, nthreads=1, prefix=None,
         restart=False):
         """
@@ -187,9 +197,7 @@ class FitMCMC(object):
         Nparams = len(self.model.params)
 
         if (nthreads == 1) and (size > 1):
-            print("% WARNING: Not sure MPIPool works yet.")
-
-            pool = MPIPool()
+            pool = MPIPool(MPI.COMM_WORLD, use_dill=False)
 
             if not pool.is_master():
                 pool.wait()
@@ -228,8 +236,8 @@ class FitMCMC(object):
         if pos is None:
             pos = self.get_initial_walker_pos(nwalkers)
 
-        sampler = emcee.EnsembleSampler(nwalkers, Nparams, loglikelihood,
-            threads=nthreads, args=args, pool=pool)
+        sampler = emcee.EnsembleSampler(nwalkers, Nparams, self.loglikelihood,
+            threads=nthreads, pool=pool)
 
         print("% Starting MCMC at {}".format(time.ctime()))
 
@@ -241,7 +249,7 @@ class FitMCMC(object):
             (t2 - t1) / 60.))
 
         if pool is not None:
-            pool.close()    
+            pool.close()
 
         ##
         # Optionally save

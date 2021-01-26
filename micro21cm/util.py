@@ -19,7 +19,6 @@ try:
 except ImportError:
     pb = False
 
-
 labels = \
 {
  'R': r'$R / [h^{-1} \ \mathrm{Mpc}]$',

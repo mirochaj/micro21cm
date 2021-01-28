@@ -199,7 +199,8 @@ class BubbleModel(object):
         Compute 2 bubble term.
         """
 
-        return Q**2
+        if not self.approx_small_Q:
+            return Q**2
 
         # Subtlety here with using Q as a free parameter.
         # Re-visit this!
@@ -215,7 +216,7 @@ class BubbleModel(object):
         # integrates to Q.
 
         integ1 = np.trapz(n_b * (V - V_o) * self.tab_R, x=np.log(self.tab_R))
-        integ2 =np.trapz(n_b * (V - V_o) * (1. + xi_bb) * self.tab_R,
+        integ2 = np.trapz(n_b * (V - V_o) * (1. + xi_bb) * self.tab_R,
             x=np.log(self.tab_R))
 
         if self.approx_small_Q:

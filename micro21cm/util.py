@@ -2,8 +2,8 @@
 
 util.py
 
-Author: Jordan Mirocha
-Affiliation: McGill University
+Authors: Jordan Mirocha and Julian B. Munoz
+Affiliation: McGill University and Harvard-Smithsonian Center for Astrophysics
 Created on: Wed 16 Dec 2020 16:16:41 EST
 
 Description:
@@ -153,3 +153,14 @@ def get_cmd_line_kwargs(argv):
                 cmd_line_kwargs[pre] = str(post)
 
     return cmd_line_kwargs
+
+
+
+def CTfit(z):
+#fit to CT=\delta T_g/\delta_matter, error below 3% for z=6-50
+    return (0.58 - 0.005*(z-10.))
+
+
+def Tgadiabaticfit(z):
+#fit to Tgas(z) adiabatically cooling in LCDM, in K. Good to 3% in z=6-50 (for exponent=2 good within 10%)
+    return 9.5 * ((1+z)/(21.))**1.95

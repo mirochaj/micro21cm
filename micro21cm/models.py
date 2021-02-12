@@ -2,8 +2,8 @@
 
 models.py
 
-Author: Jordan Mirocha
-Affiliation: McGill University
+Authors: Jordan Mirocha and Julian B. Munoz
+Affiliation: McGill University and Harvard-Smithsonian Center for Astrophysics
 Created on: Wed 16 Dec 2020 16:16:41 EST
 
 Description:
@@ -23,7 +23,7 @@ class BubbleModel(object):
         Rmin=1e-2, Rmax=1e4, NR=1000, cross_terms=0,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
-        use_pbar=False, approx_small_Q=True):
+        use_pbar=False, approx_small_Q=True, include_adiabatic_fluctuations = True):
         """
         Make a simple bubble model of the IGM.
 
@@ -69,6 +69,7 @@ class BubbleModel(object):
         self.bubbles_pdf = bubbles_pdf
         self.use_pbar = use_pbar
         self.approx_small_Q = approx_small_Q
+        self.include_adiabatic_fluctuations = include_adiabatic_fluctuations
 
         self.params = ['Ts']
         if self.bubbles:
@@ -116,6 +117,21 @@ class BubbleModel(object):
             return -1
         else:
             return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
+
+
+    def get_CT(self,z,Ts):
+        # if self.bubbles:
+        #     return 0.0 #we do not include it for the cases with bubbles, only for density (revisit)
+        # else:
+        return CTfit(z) * min(1.0,Ts/Tgadiabatic(z))
+
+    def get_betam(self,z,Ts):
+        #bias, \delta T21 = betam \delta_m
+        # if self.bubbles:
+        #     return 1.0 #we do not include it for the cases with bubbles, only for density (revisit). Bias 1 in this case.
+        # else:
+        return 1.0 + self.get_CT(self,z,Ts) * self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
+
 
     def get_ps_matter(self, z, k):
         if not hasattr(self, '_matter_ps_'):
@@ -341,14 +357,23 @@ class BubbleModel(object):
 
         avg_term = alpha**2 * _Q_**2
 
-        return dTb**2 * (bb * alpha**2 + dd * beta**2 - avg_term)
+        if(self.include_adiabatic_fluctuations):
+            betam = self.get_betam(z,Ts) #this ignores input beta
+        else:
+            betam = beta
+
+        return dTb**2 * (bb * alpha**2 + dd * betam**2 - avg_term)
 
     def get_ps_21cm(self, z, k, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, beta=1.):
 
         # Much faster without bubbles -- just scale P_mm
         if not self.bubbles:
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
-            ps_21 = self.get_dTb_bulk(z, Ts=Ts)**2 * ps_mm
+            if(self.include_adiabatic_fluctuations):
+                betam = self.get_betam(z,Ts) #this ignores input beta
+            else:
+                betam = beta
+            ps_21 = self.get_dTb_bulk(z, Ts=Ts)**2 * ps_mm * betam**2
         else:
             cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
                 beta=beta)

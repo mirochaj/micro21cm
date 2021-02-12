@@ -16,14 +16,16 @@ import powerbox as pbox
 from scipy.spatial import cKDTree
 from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
-from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar
+from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
+    Tgadiabaticfit
 
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, cross_terms=0,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
-        use_pbar=False, approx_small_Q=True, include_adiabatic_fluctuations = True):
+        use_pbar=False, approx_small_Q=True,
+        include_adiabatic_fluctuations=True):
         """
         Make a simple bubble model of the IGM.
 
@@ -112,26 +114,30 @@ class BubbleModel(object):
             self._init_cosmology()
         return self._cosmo_
 
+    def get_Tcmb(self, z):
+        return self.cosmo.TCMB * (1. + z)
+
+    def get_Tgas(self, z):
+        return Tgadiabaticfit(z)
+
     def get_alpha(self, z, Ts):
         if self.bubbles_ion:
             return -1
         else:
             return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
-
     def get_CT(self,z,Ts):
         # if self.bubbles:
         #     return 0.0 #we do not include it for the cases with bubbles, only for density (revisit)
         # else:
-        return CTfit(z) * min(1.0,Ts/Tgadiabatic(z))
+        return CTfit(z) * min(1.0,Ts/self.get_Tgas(z))
 
     def get_betam(self,z,Ts):
         #bias, \delta T21 = betam \delta_m
         # if self.bubbles:
         #     return 1.0 #we do not include it for the cases with bubbles, only for density (revisit). Bias 1 in this case.
         # else:
-        return 1.0 + self.get_CT(self,z,Ts) * self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
-
+        return 1.0 + self.get_CT(z,Ts) * self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
     def get_ps_matter(self, z, k):
         if not hasattr(self, '_matter_ps_'):
@@ -369,7 +375,7 @@ class BubbleModel(object):
         # Much faster without bubbles -- just scale P_mm
         if not self.bubbles:
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
-            if(self.include_adiabatic_fluctuations):
+            if self.include_adiabatic_fluctuations:
                 betam = self.get_betam(z,Ts) #this ignores input beta
             else:
                 betam = beta

@@ -121,7 +121,9 @@ class BubbleModel(object):
         return Tgadiabaticfit(z)
 
     def get_alpha(self, z, Ts):
-        if self.bubbles_ion:
+        if not self.bubbles:
+            return 0.
+        elif self.bubbles_ion:
             return -1
         else:
             return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
@@ -163,6 +165,22 @@ class BubbleModel(object):
         return self._tab_R
 
     def get_bsd(self, Q=0.5, R_b=5., sigma_b=0.1):
+        """
+        Compute the bubble size distribution (BSD).
+
+        Parameters
+        ----------
+        Q : int, float
+            Fraction of volume filled by bubbles. Normalizes the BSD.
+        R_b : int, float
+            Typical bubble size [cMpc / h].
+        sigma_b : int, float
+            Another free parameter whose meaning depends on value of
+            `bubbles_pdf` attribute set in constructor. For default `lognormal`
+            BSD, this characterizes the width of the distribution. For `plexp`
+            this is the power-law slope (minus 3).
+
+        """
 
         if self.bubbles_pdf == 'lognormal':
             logRarr = np.log(self.tab_R)
@@ -376,7 +394,7 @@ class BubbleModel(object):
         if not self.bubbles:
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
             if self.include_adiabatic_fluctuations:
-                betam = self.get_betam(z,Ts) #this ignores input beta
+                betam = self.get_betam(z, Ts) #this ignores input beta
             else:
                 betam = beta
             ps_21 = self.get_dTb_bulk(z, Ts=Ts)**2 * ps_mm * betam**2

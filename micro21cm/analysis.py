@@ -24,7 +24,7 @@ def read_mcmc():
 
 def plot_triangle(flatchain, fig=1, elements=[0,1], complement=[False, True],
     bins=20, burn=0, fig_kwargs={}, contours=True, fill=False, nu=[0.95, 0.68],
-    **kwargs):
+    is_log=[False,False], **kwargs):
     """
 
     """
@@ -39,10 +39,15 @@ def plot_triangle(flatchain, fig=1, elements=[0,1], complement=[False, True],
     p1 = flatchain[burn:,elements[0]]
     p2 = flatchain[burn:,elements[1]]
 
+    if is_log[0]:
+        p1 = 10**p1
+    if is_log[1]:
+        p2 = 10**p2
     if complement[0]:
         p1 = 1. - p1
     if complement[1]:
         p2 = 1. - p2
+
 
     if type(bins) not in [list, tuple, np.ndarray]:
         bins = [bins] * 2
@@ -57,7 +62,8 @@ def plot_triangle(flatchain, fig=1, elements=[0,1], complement=[False, True],
         ax_2d.contour(bc2, bc1, hist / hist.max(),
             levels, zorder=4, **kwargs)
     else:
-        h, x, y, img = ax_2d.hist2d(p2, p1, bins=bins[-1::-1], cmap='viridis')
+        h, x, y, img = ax_2d.hist2d(p2, p1, bins=bins[-1::-1], cmap='viridis',
+            norm=LogNorm())
 
     ax_p1.hist(p1, density=True, bins=bins[0])
     ax_p2.hist(p2, density=True, bins=bins[1])

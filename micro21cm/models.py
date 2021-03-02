@@ -22,11 +22,12 @@ from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
 
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
-        Rmin=1e-2, Rmax=1e4, NR=1000, xcorr_rho_ion=0,
+        include_adiabatic_fluctuations=True, include_xcorr_rho_ion=0,
+        include_los_modes_only=False,
+        Rmin=1e-2, Rmax=1e4, NR=1000,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
-        use_pbar=False, approx_small_Q=True,
-        include_adiabatic_fluctuations=True):
+        use_pbar=False, approx_small_Q=True):
         """
         Make a simple bubble model of the IGM.
 
@@ -73,7 +74,8 @@ class BubbleModel(object):
         self.use_pbar = use_pbar
         self.approx_small_Q = approx_small_Q
         self.include_adiabatic_fluctuations = include_adiabatic_fluctuations
-        self.xcorr_rho_ion = xcorr_rho_ion
+        self.include_xcorr_rho_ion = include_xcorr_rho_ion
+        self.include_los_modes_only = include_los_modes_only
 
         self.params = ['Ts']
         if self.bubbles:
@@ -136,12 +138,15 @@ class BubbleModel(object):
         # else:
         return CTfit(z) * min(1.0,Ts/self.get_Tgas(z))
 
-    def get_betam(self,z,Ts):
-        #bias, \delta T21 = betam \delta_m
-        # if self.bubbles:
-        #     return 1.0 #we do not include it for the cases with bubbles, only for density (revisit). Bias 1 in this case.
-        # else:
-        return 1.0 + self.get_CT(z,Ts) * self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
+    def get_contrast(self, z, Ts):
+        return (Ts - self.get_Tcmb(z)) / Ts
+
+    #def get_betam(self,z,Ts):
+    #    #bias, \delta T21 = betam \delta_m
+    #    # if self.bubbles:
+    #    #     return 1.0 #we do not include it for the cases with bubbles, only for density (revisit). Bias 1 in this case.
+    #    # else:
+    #    return 1.0 + self.get_CT(z,Ts) * self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
     def get_ps_matter(self, z, k):
         if not hasattr(self, '_matter_ps_'):
@@ -406,12 +411,12 @@ class BubbleModel(object):
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
 
-        if self.xcorr_rho_ion == 1:
-            d_i = delta_ion
-        elif self.xcorr_rho_ion == 2:
+        if self.include_xcorr_rho_ion == 1:
             d_i = self.get_bubble_density(z, Q=Q, R_b=R_b, sigma_b=sigma_b)
+        elif self.include_xcorr_rho_ion == 2:
+            d_i = delta_ion
         else:
-            raise NotImplemented('No xcorr_rho_ion>2 options!')
+            raise NotImplemented('No include_xcorr_rho_ion>2 options!')
 
         d_n = -d_i * Q / (1. - Q)
         bd = d_i * bb + d_n * Q * (1. - Q)
@@ -426,12 +431,14 @@ class BubbleModel(object):
             + alpha**2 * bbdd \
             - 2 * alpha**2 * Q * bd_1pt - alpha**2 * bd_1pt**2
 
-    def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, beta=1.,
+    def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
         delta_ion=0.):
 
         bb = self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b)
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
+        con = self.get_contrast(z, Ts)
+        CT = self.get_CT(z, Ts)
 
         dTb = self.get_dTb_bulk(z, Ts=Ts)
 
@@ -442,12 +449,12 @@ class BubbleModel(object):
 
         avg_term = alpha**2 * _Q_**2
 
-        if self.include_adiabatic_fluctuations:
-            betam = self.get_betam(z,Ts) #this ignores input beta
-        else:
-            betam = beta
+        cf_21 = bb * alpha**2 + dd - avg_term
 
-        cf_21 = bb * alpha**2 + dd * betam**2 - avg_term
+        # Include correlations in density and temperature caused by
+        # adiabatic expansion/contraction.
+        if self.include_adiabatic_fluctuations:
+            cf_21 += dd * (2 * CT / con + (CT / con)**2)
 
         if self.xcorr_rho_ion:
             new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
@@ -456,20 +463,23 @@ class BubbleModel(object):
 
         return dTb**2 * cf_21
 
-    def get_ps_21cm(self, z, k, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, beta=1.,
+    def get_ps_21cm(self, z, k, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
         delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
-        if not self.bubbles:
+        if (not self.bubbles) or (Q == 0.):
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
             if self.include_adiabatic_fluctuations:
-                betam = self.get_betam(z, Ts) #this ignores input beta
+                con = self.get_contrast(z, Ts)
+                CT = self.get_CT(z, Ts)
+                betam = 1. + (2 * CT / con + (CT / con)**2)
             else:
-                betam = beta
-            ps_21 = self.get_dTb_bulk(z, Ts=Ts)**2 * ps_mm * betam**2
+                betam = 1.
+
+            ps_21 = self.get_dTb_bulk(z, Ts=Ts)**2 * ps_mm * betam
         else:
             cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
-                beta=beta, delta_ion=delta_ion)
+                delta_ion=delta_ion)
 
             # Setup interpolant
             _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',

@@ -13,15 +13,16 @@ Description:
 import camb
 import numpy as np
 import powerbox as pbox
+from scipy.special import erfcinv
 from scipy.spatial import cKDTree
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumtrapz, quad
 from scipy.interpolate import interp1d
 from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
     Tgadiabaticfit
 
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
-        Rmin=1e-2, Rmax=1e4, NR=1000, rho_ion_xcorr=False,
+        Rmin=1e-2, Rmax=1e4, NR=1000, xcorr_rho_ion=0,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
         use_pbar=False, approx_small_Q=True,
@@ -72,7 +73,7 @@ class BubbleModel(object):
         self.use_pbar = use_pbar
         self.approx_small_Q = approx_small_Q
         self.include_adiabatic_fluctuations = include_adiabatic_fluctuations
-        self.rho_ion_xcorr = rho_ion_xcorr
+        self.xcorr_rho_ion = xcorr_rho_ion
 
         self.params = ['Ts']
         if self.bubbles:
@@ -367,6 +368,37 @@ class BubbleModel(object):
 
         return (bd/np.sqrt(bb*dd))
 
+    def get_variance_matter(self, z, R):
+
+        Pofk = lambda k: self.get_ps_matter(z, k)
+        Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) / (k * R)**3
+
+        integrand = lambda k: Pofk(k) * np.abs(Wofk(k)**2) * 4. * np.pi * k**2 \
+            / (2. * np.pi)**3
+
+        var = quad(integrand, 0, np.inf, limit=100000)[0]
+
+        return var
+
+    def get_bubble_density(self, z, Q=0.5, R_b=5., sigma_b=0.1):
+        """
+        Return mean density in ionized regions.
+        """
+
+        var_R = self.get_variance_matter(z, R=R_b)
+        sig_R = np.sqrt(var_R)
+
+        delta_thresh = np.sqrt(2 * var_R) * erfcinv(2 * Q)
+
+        #bd = np.exp(-delta_thresh**2 / 2 / var_R) * sig_R / np.sqrt(2 * np.pi)
+        integ = lambda delt: np.exp(-delt**2 / 2. / var_R) \
+            / np.sqrt(2 * np.pi * var_R)
+        bd = quad(lambda delt: integ(delt) * delt, delta_thresh, np.inf)[0]
+
+        norm = quad(lambda delt: integ(delt), delta_thresh, np.inf)[0]
+
+        return bd / norm
+
     def get_cross_terms(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, beta=1.,
         delta_ion=0.):
 
@@ -374,7 +406,13 @@ class BubbleModel(object):
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
 
-        d_i = delta_ion
+        if self.xcorr_rho_ion == 1:
+            d_i = delta_ion
+        elif self.xcorr_rho_ion == 2:
+            d_i = self.get_bubble_density(z, Q=Q, R_b=R_b, sigma_b=sigma_b)
+        else:
+            raise NotImplemented('No xcorr_rho_ion>2 options!')
+
         d_n = -d_i * Q / (1. - Q)
         bd = d_i * bb + d_n * Q * (1. - Q)
 
@@ -411,7 +449,7 @@ class BubbleModel(object):
 
         cf_21 = bb * alpha**2 + dd * betam**2 - avg_term
 
-        if self.rho_ion_xcorr:
+        if self.xcorr_rho_ion:
             new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
                 delta_ion=delta_ion)
             cf_21 += new

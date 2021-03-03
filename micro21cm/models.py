@@ -23,7 +23,7 @@ from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
         include_adiabatic_fluctuations=True, include_xcorr_rho_ion=0,
-        include_los_modes_only=False,
+        include_rsd=False, include_mu_gt=-1.,
         Rmin=1e-2, Rmax=1e4, NR=1000,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
@@ -75,7 +75,8 @@ class BubbleModel(object):
         self.approx_small_Q = approx_small_Q
         self.include_adiabatic_fluctuations = include_adiabatic_fluctuations
         self.include_xcorr_rho_ion = include_xcorr_rho_ion
-        self.include_los_modes_only = include_los_modes_only
+        self.include_rsd = include_rsd
+        self.include_mu_gt = include_mu_gt
 
         self.params = ['Ts']
         if self.bubbles:
@@ -140,6 +141,9 @@ class BubbleModel(object):
 
     def get_contrast(self, z, Ts):
         return 1. - self.get_Tcmb(z) / Ts
+
+    #def get_phi(self, z, Ts):
+    #    return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
     #def get_betam(self,z,Ts):
     #    #bias, \delta T21 = betam \delta_m
@@ -568,7 +572,16 @@ class BubbleModel(object):
             ps_21 = get_ps_from_cf(k, f_cf=f_cf, Rmin=self.tab_R.min(),
                 Rmax=self.tab_R.max())
 
+        #
+        if self.include_rsd:
+            ps_21 *= self.get_rsd_boost(self.include_mu_gt)
+
         return ps_21
+
+    def get_rsd_boost(self, mu):
+        # This is just \int_{\mu_{\min}}^1 (1 + \mu^2)^2
+        mod = (1. - mu) + 2. * (1. - mu**3) / 3. + 0.2 * (1. - mu**5)
+        return mod / (1. - mu)
 
     def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.5, Ts=np.inf, R_b=5.,
         sigma_b=0.1, beta=1., use_kdtree=True, include_rho=True):

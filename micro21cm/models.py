@@ -139,7 +139,7 @@ class BubbleModel(object):
         return CTfit(z) * min(1.0,Ts/self.get_Tgas(z))
 
     def get_contrast(self, z, Ts):
-        return (Ts - self.get_Tcmb(z)) / Ts
+        return 1. - self.get_Tcmb(z) / Ts
 
     #def get_betam(self,z,Ts):
     #    #bias, \delta T21 = betam \delta_m
@@ -234,6 +234,11 @@ class BubbleModel(object):
         n_b = self.get_bsd(Q, R_b=R_b, sigma_b=sigma_b)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
+        V = 4. * np.pi * self.tab_R**3 / 3.
+        norm = 4 * np.pi * self.tab_R**2
+
+        n_b *= norm / V
+
         integ = np.trapz(n_b * V_o * self.tab_R, x=np.log(self.tab_R))
 
         if self.approx_small_Q:
@@ -241,7 +246,58 @@ class BubbleModel(object):
         else:
             return 1. - np.exp(-integ)
 
+    def get_P1_exc(self, d, Q=0.5, R_b=5., sigma_b=0.1):
+        """
+        Compute 1 bubble term.
+        """
+
+        n_b = self.get_bsd(Q, R_b=R_b, sigma_b=sigma_b)
+        V_o = self.get_overlap_vol(self.tab_R, d)
+
+        V = 4. * np.pi * self.tab_R**3 / 3.
+        norm = 4 * np.pi * self.tab_R**2
+
+        n_b *= norm / V
+
+        V = 4. * np.pi * self.tab_R**3 / 3.
+        integ = np.trapz(n_b * (V - V_o) * self.tab_R, x=np.log(self.tab_R))
+
+        if self.approx_small_Q:
+            return integ
+        else:
+            return 1. - np.exp(-integ)
+
     def get_P2(self, d, Q=0.5, R_b=5., sigma_b=0.1, xi_bb=0.):
+        """
+        Compute 2 bubble term.
+        """
+
+        if not self.approx_small_Q:
+            return Q**2
+
+        # Subtlety here with using Q as a free parameter.
+        # Re-visit this!
+        n_b = self.get_bsd(Q, R_b=R_b, sigma_b=sigma_b)
+        V_o = self.get_overlap_vol(self.tab_R, d)
+
+        V = 4. * np.pi * self.tab_R**3 / 3.
+        norm = 4 * np.pi * self.tab_R**2
+
+        n_b *= norm / V
+
+        # n_b normalized such that integral weighted by 4 * np.pi * self.tab_R**2
+        # integrates to Q.
+
+        integ1 = np.trapz(n_b * (V - V_o) * self.tab_R, x=np.log(self.tab_R))
+        integ2 = np.trapz(n_b * (V - V_o) * (1. + xi_bb) * self.tab_R,
+            x=np.log(self.tab_R))
+
+        if self.approx_small_Q:
+            return integ1 * integ2
+        else:
+            return (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
+
+    def get_P2_exc(self, d, Q=0.5, R_b=5., sigma_b=0.1, xi_bb=0.):
         """
         Compute 2 bubble term.
         """
@@ -314,7 +370,26 @@ class BubbleModel(object):
         P1 = np.array(P1)
         P2 = np.array(P2)
 
-        return P1 * (1. - Q) + (1. - P1) * P2
+        # Do we hit P1 with  (1. - Q)?
+        return P1 + (1. - P1) * P2
+
+    def get_bn(self, z, Q=0.5, R_b=5., sigma_b=0.1):
+        pb = ProgressBar(self.tab_R.size, use=self.use_pbar,
+            name="<bn'>(z={})".format(z))
+        pb.start()
+
+        P1 = []
+        for i, RR in enumerate(self.tab_R):
+            pb.update(i)
+            _P1 = self.get_P1_exc(RR, Q=Q, R_b=R_b, sigma_b=sigma_b)
+            P1.append(_P1)
+
+        pb.finish()
+        P1 = np.array(P1)
+
+        # Probability that a single source ionizes only one pt * the
+        # probability that the other point isn't ionized by a different source.
+        return P1 * (1. - Q)
 
     def get_dd(self, z):
         """
@@ -408,6 +483,7 @@ class BubbleModel(object):
         delta_ion=0.):
 
         bb = self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b)
+        bn = self.get_bn(z, Q, R_b=R_b, sigma_b=sigma_b)
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
 
@@ -419,7 +495,7 @@ class BubbleModel(object):
             raise NotImplemented('No include_xcorr_rho_ion>2 options!')
 
         d_n = -d_i * Q / (1. - Q)
-        bd = d_i * bb + d_n * Q * (1. - Q)
+        bd = d_i * bb + d_n * bn
 
         bd_1pt = d_i * Q
 
@@ -456,7 +532,7 @@ class BubbleModel(object):
         if self.include_adiabatic_fluctuations:
             cf_21 += dd * (2 * CT / con + (CT / con)**2)
 
-        if self.xcorr_rho_ion:
+        if self.include_xcorr_rho_ion:
             new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
                 delta_ion=delta_ion)
             cf_21 += new

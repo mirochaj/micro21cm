@@ -24,6 +24,7 @@ labels = \
  'R': r'$R / [h^{-1} \ \mathrm{Mpc}]$',
  'k': r'$k / [h \ \mathrm{cMpc}^{-1}]$',
  'pofk': r'$P(k)$',
+ 'cf21': r'$\xi_{21}(R)$',
  'delta_sq': r'$\Delta^2(k) \ [\mathrm{mK}^2]$',
  'delta_sq_long': r'$k^3 \left(\frac{P(k)}{2\pi^2}\right) \ [\mathrm{mK}^2]$',
  'Ts': r'$T_S / \mathrm{K}$',
@@ -33,7 +34,7 @@ labels = \
  'xHI': r'$x_{\mathrm{HI}}$',
 }
 
-def get_cf_from_ps(R, f_ps, kmin=1e-3, kmax=5000., rtol=1e-5, atol=1e-5):
+def get_cf_from_ps(R, f_ps, kmin=1e-4, kmax=5000., rtol=1e-5, atol=1e-5):
 
     cf = np.zeros_like(R)
     for i, RR in enumerate(R):
@@ -154,7 +155,22 @@ def get_cmd_line_kwargs(argv):
 
     return cmd_line_kwargs
 
+def split_by_sign(x, y):
+    """
+    Split apart an array into its positive and negative chunks.
+    """
 
+    splitter = np.diff(np.sign(y))
+
+    if np.all(splitter == 0):
+        ych = [y]
+        xch = [x]
+    else:
+        splits = np.atleast_1d(np.argwhere(splitter != 0).squeeze()) + 1
+        ych = np.split(y, splits)
+        xch = np.split(x, splits)
+
+    return xch, ych
 
 def CTfit(z):
 #fit to CT=\delta T_g/\delta_matter, error below 3% for z=6-50

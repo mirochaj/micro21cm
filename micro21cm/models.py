@@ -13,10 +13,10 @@ Description:
 import camb
 import numpy as np
 import powerbox as pbox
-from scipy.special import erfcinv
 from scipy.spatial import cKDTree
-from scipy.integrate import cumtrapz, quad
 from scipy.interpolate import interp1d
+from scipy.integrate import cumtrapz, quad
+from scipy.special import erfcinv, erf, erfc
 from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
     Tgadiabaticfit
 
@@ -24,10 +24,10 @@ class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
         include_adiabatic_fluctuations=True, include_cross_terms=0,
         include_rsd=False, include_mu_gt=-1., use_volume_match=1,
-        Rmin=1e-2, Rmax=1e3, NR=1000,
+        Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='lognormal',
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
-        use_pbar=False, approx_small_Q=True):
+        use_pbar=False, approx_small_Q=True, approx_linear=True):
         """
         Make a simple bubble model of the IGM.
 
@@ -78,6 +78,8 @@ class BubbleModel(object):
         self.include_rsd = include_rsd
         self.include_mu_gt = include_mu_gt
         self.use_volume_match = use_volume_match
+        self.approx_linear = approx_linear
+        self.density_pdf = density_pdf
 
         self.params = ['Ts']
         if self.bubbles:
@@ -95,7 +97,6 @@ class BubbleModel(object):
 
         self.cosmo_params = \
             {
-             'ns': ns,
              'H0': little_h * 100.,
              'ombh2': omega_b * little_h**2,
              'omch2': omega_cdm * little_h**2,
@@ -104,15 +105,24 @@ class BubbleModel(object):
             }
 
     def _init_cosmology(self):
+
         transfer_pars = camb.model.TransferParams(**self.transfer_params)
 
         # Should setup the cosmology more carefully.
         self._cosmo_ = camb.set_params(WantTransfer=True,
             Transfer=transfer_pars, **self.cosmo_params)
 
+        if self.approx_linear:
+            nonlin = camb.model.NonLinear_none
+        else:
+            nonlin = camb.model.NonLinear_both
+
+        #self._cosmo_.set_matter_power(redshifts=self._redshifts,
+        #    nonlinear=nonlin)
+
         # `P` method of `matter_ps` is function of (z, k)
         self._matter_ps_ = camb.get_matter_power_interpolator(self._cosmo_,
-            **self.transfer_params)
+            nonlinear=self._cosmo_.NonLinear, **self.transfer_params)
 
     @property
     def cosmo(self):
@@ -156,6 +166,12 @@ class BubbleModel(object):
     def get_ps_matter(self, z, k):
         if not hasattr(self, '_matter_ps_'):
             self._init_cosmology()
+
+        #self.cosmo.set_matter_power(redshifts=[z], kmax=k.max())
+        #results = camb.get_results(self.cosmo)
+
+        #kh, z, pk = results.get_matter_power_spectrum(minkh=k.min(), maxkh=k.max(), npoints=k.size)
+
         return self._matter_ps_.P(z, k)
 
     def get_Tcmb(self, z):
@@ -297,7 +313,7 @@ class BubbleModel(object):
 
         return V_o
 
-    def get_bb(self, z, Q=0.5, R_b=5., sigma_b=0.1):
+    def get_bb(self, z, Q=0.5, R_b=5., sigma_b=0.1, separate=False):
         """
         Comptute <bb'> following bare-bones FZH04 model.
         """
@@ -321,16 +337,22 @@ class BubbleModel(object):
         P2 = np.array(P2)
 
         # Do we hit P1 with  (1. - Q)?
-        return P1 + (1. - P1) * P2
+        if separate:
+            return P1, P2
+        else:
+            return P1 + (1. - P1) * P2
 
-    def get_bn(self, z, Q=0.5, R_b=5., sigma_b=0.1):
+    def get_bn(self, z, Q=0.5, R_b=5., sigma_b=0.1, separate=False):
         bb = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b)
 
         P1e = [self.get_P1(RR, Q=Q, R_b=R_b, sigma_b=sigma_b, exclusion=1) \
             for RR in self.tab_R]
         P1e = np.array(P1e)
 
-        return P1e - bb
+        if separate:
+            return P1e, (1. - Q)
+        else:
+            return P1e * (1. - Q)
 
     def get_dd(self, z):
         """
@@ -390,7 +412,10 @@ class BubbleModel(object):
         return (bd/np.sqrt(bb*dd))
 
     def get_variance_matter(self, z, R):
-
+        """
+        Return the variance in the matter field at redshift `z` when smoothing
+        on scale `R`.
+        """
         Pofk = lambda k: self.get_ps_matter(z, k)
         Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) / (k * R)**3
 
@@ -406,35 +431,59 @@ class BubbleModel(object):
         Return mean density in ionized regions.
         """
 
+        # Hack
+        #if Q <= 0.1:
+        #    return 1. * (2. / R_b)**0.25
+        #else:
+        #    return 1. * (2. / R_b)**0.25 * (np.exp((1. - Q)**2) - 1) \
+        #        / (np.exp((1. - 0.1)**2) - 1)
+
         if self.use_volume_match == 1:
-            Rsm = R_b
-        elif self.use_volume_match == 2:
             bsd = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b)
             bsd *= 4. * np.pi * self.tab_R**3 / 3.
-            bsd /= self.tab_R
-            bsd /= Q
+            # This is dn/dR. Does it matter that it's not dn/dlogR?
+            bsd /= Q # Doesn't matter here
             Rsm = self.tab_R[np.argmax(bsd)]
+        elif self.use_volume_match == 2:
+            Rsm = R_b
         else:
             raise NotImplemented('help')
 
         var_R = self.get_variance_matter(z, R=Rsm)
         sig_R = np.sqrt(var_R)
 
-        delta_thresh = np.sqrt(2 * var_R) * erfcinv(2 * Q)
+        # Just changes meaning of what `x` and `w` are.
+        # For density_pdf = 'normal' or 'Gaussian', x = delta, for log-normal,
+        # x = log(1 + \delta)
+        if self.density_pdf.lower() in ['normal', 'gaussian']:
+            w = sig_R
+        else:
+            w = np.sqrt(np.log(var_R + 1.))
 
-        integ = lambda delt: np.exp(-delt**2 / 2. / var_R) \
-            / np.sqrt(2 * np.pi * var_R)
-        bd = quad(lambda delt: integ(delt) * delt, delta_thresh, np.inf)[0]
+        # Eq. 33
+        x_thresh = np.sqrt(2) * w * erfcinv(2 * Q)
+        Pofx = lambda x: np.exp(-x**2 / 2. / w**2) \
+            / np.sqrt(2 * np.pi) / w
 
-        norm = quad(lambda delt: integ(delt), delta_thresh, np.inf)[0]
+        # Could do this analytically too.
+        norm = quad(lambda x: Pofx(x), x_thresh, np.inf,
+            limit=100000)[0]
 
-        return bd / norm
+        if self.density_pdf.lower() in ['normal', 'gaussian']:
+            del_i = np.exp(-x_thresh**2 / 2. / w**2) * w / np.sqrt(2 * np.pi)
+        else:
+            del_i = 0.5 * (-1. + np.exp(w**2 / 2.) \
+                * (1. + erf((w**2 - x_thresh) / np.sqrt(2.) / w)) \
+                + erf(x_thresh / np.sqrt(2.) / w))
+
+        return del_i / norm
 
     def get_cross_terms(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, beta=1.,
         delta_ion=0., separate=False):
 
         bb = self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b)
         bn = self.get_bn(z, Q, R_b=R_b, sigma_b=sigma_b)
+
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
 
@@ -446,11 +495,23 @@ class BubbleModel(object):
         if self.include_cross_terms == 1:
             d_n = -d_i * Q / (1. - Q)
             bd = d_i * bb + d_n * bn
-
+            #bd = bb_1 * d_i
+            #bd = np.minimum(dd, bd)
             bd_1pt = d_i * Q
 
             bbd = d_i * bb
-            bdd = d_i * dd
+            #bdd = d_i * dd
+            bdd = d_i * d_i * bb + d_i * d_n * bn
+            bbdd = bb * d_i**2
+        elif self.include_cross_terms == 2:
+            d_n = -d_i * Q / (1. - Q)
+            bd = d_i * bb + d_n * bn#d_i * dd
+            #bd = bb_1 * d_i
+            #bd = np.minimum(dd, bd)
+            bd_1pt = d_i * Q
+
+            bbd = d_i * bb
+            bdd = d_i * Q * dd
             bbdd = bb * d_i**2
         else:
             raise NotImplemented('Only know include_cross_terms=1!')

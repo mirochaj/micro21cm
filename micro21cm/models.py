@@ -446,6 +446,18 @@ class BubbleModel(object):
             Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 2:
             Rsm = R_b
+        elif self.use_volume_match == 3:
+            bb1, bb2 = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
+                separate=True)
+            bb = bb1 + bb2
+            P1_frac = bb1 / bb
+            Rsm = np.interp(0.75, P1_frac[-1::-1], self.tab_R[-1::-1])
+        elif self.use_volume_match == 4:
+            bb1, bb2 = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
+                separate=True)
+            bb = bb1 + bb2
+            P2_frac = bb2 / bb
+            Rsm = np.interp(0.75, P2_frac, self.tab_R)
         else:
             raise NotImplemented('help')
 

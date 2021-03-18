@@ -21,14 +21,15 @@ from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
     Tgadiabaticfit
 
 class BubbleModel(object):
-    def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
-        bubbles_Rfree=True, include_adiabatic_fluctuations=True,
+    def __init__(self, bubbles=True, bubbles_ion=True,
+        bubbles_pdf='lognormal', bubbles_Rfree=True,
+        include_adiabatic_fluctuations=True, include_P1_corr=False,
         include_cross_terms=0, include_rsd=False, include_mu_gt=-1.,
         use_volume_match=1,
         Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='lognormal',
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
-        use_pbar=False, approx_small_Q=True, approx_linear=True):
+        use_pbar=False, approx_small_Q=False, approx_linear=True):
         """
         Make a simple bubble model of the IGM.
 
@@ -75,7 +76,9 @@ class BubbleModel(object):
         self.bubbles_Rfree = bubbles_Rfree
         self.use_pbar = use_pbar
         self.approx_small_Q = approx_small_Q
-        self.include_adiabatic_fluctuations = include_adiabatic_fluctuations
+        self.include_P1_corr = include_P1_corr
+        self.include_adiabatic_fluctuations = \
+            include_adiabatic_fluctuations
         self.include_cross_terms = include_cross_terms
         self.include_rsd = include_rsd
         self.include_mu_gt = include_mu_gt
@@ -197,17 +200,21 @@ class BubbleModel(object):
                 self.NR)
         return self._tab_R
 
-    def _get_bsd_from_nb(self, Q=0.5, sigma_b=0.1, n_b=None, Qtol=1e-3,
-        maxiter=10000):
+    def _get_Rb_from_nb(self, Q=0.5, sigma_b=0.1, n_b=None,
+        Qtol=1e-6, maxiter=10000):
 
         # Need to do this iteratively.
 
-        if not hasattr(self, '_cache_bsd'):
-            self._cache_bsd = {}
+        if not hasattr(self, '_cache_Rb'):
+            self._cache_Rb = {}
 
         # Cache seems to cause problems
-        #if (Q, sigma_b, n_b, Qtol) in self._cache_bsd.keys():
-        #    return self._cache_bsd[(Q, sigma_b, n_b, Qtol)]
+        if (Q, sigma_b, n_b, Qtol) in self._cache_Rb.keys():
+            #if Q > 0.01:
+            #    print('found cached copy', (Q, sigma_b, n_b, Qtol),
+            #        self._cache_bsd.keys())
+            #input('<enter>')
+            return self._cache_Rb[(Q, sigma_b, n_b, Qtol)]
 
         logRarr = np.log(self.tab_R)
 
@@ -223,26 +230,27 @@ class BubbleModel(object):
         while ct < maxiter:
             logRhist.append(logRb)
 
-            if self.bubbles_pdf == 'lognormal':
-                bsd = np.exp(-(logRarr - logRb)**2 / 2. / sigma_b**2)
-            elif self.bubbles_pdf == 'plexp':
-                Rb = np.exp(logRb)
-                bsd = (self.tab_R / Rb)**(3.0+sigma_b) \
-                    * np.exp(-self.tab_R / Rb)
+            _bsd = self._get_bsd_unnormalized(Q=Q, R_b=np.exp(logRb),
+                sigma_b=sigma_b, n_b=n_b)
 
             # Normalize bsd so we get requested `n_b`
-            norm = n_b / np.trapz(bsd * self.tab_R, x=np.log(self.tab_R))
-            bsd *= norm
+            norm = n_b / np.trapz(_bsd * self.tab_R, x=np.log(self.tab_R))
+            _bsd *= norm
 
             # Compute Q
             V = 4. * np.pi * self.tab_R**3 / 3.
-            _Q_ = np.trapz(bsd * V * self.tab_R, x=np.log(self.tab_R))
+            integ = np.trapz(_bsd * V * self.tab_R, x=np.log(self.tab_R))
+
+            if self.approx_small_Q:
+                _Q_ = integ
+            else:
+                _Q_ = 1. - np.exp(-integ)
 
             if abs(Q - _Q_) < Qtol:
                 break
 
-            # If we're just flip-flopping and not converging, make step size
-            # smaller
+            # If we're just flip-flopping and not converging, make step
+            # size smaller
             if ct % 4 == 0:
                 if np.unique(logRhist[-4:]).size == 2:
                     logRstep *= 0.5
@@ -263,12 +271,26 @@ class BubbleModel(object):
             print("(actual Q={})".format(_Q_))
 
         # Little kludge to ensure we get Q exactly in LS limit? Dep. on Qtol.
-        bsd *= Q / _Q_
+        #bsd *= Q / _Q_
 
         # Once we find the right bubble size, cache and return.
-        self._cache_bsd[(Q, sigma_b, n_b, Qtol)] = bsd.copy(), np.exp(logRb)
+        self._cache_Rb[(Q, sigma_b, n_b, Qtol)] = np.exp(logRb)
 
-        return bsd, np.exp(logRb)
+        return self._cache_Rb[(Q, sigma_b, n_b, Qtol)]
+
+    def _get_bsd_unnormalized(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+        logRarr = np.log(self.tab_R)
+        logRb = np.log(R_b)
+        if self.bubbles_pdf == 'lognormal':
+            bsd = np.exp(-(logRarr - logRb)**2 / 2. / sigma_b**2)
+        elif self.bubbles_pdf == 'plexp':
+            bsd = (self.tab_R / R_b)**(3.0+sigma_b) \
+                * np.exp(-self.tab_R / R_b)
+        else:
+            raise NotImplemented("Unrecognized `bubbles_pdf`: {}".format(
+                self.bubbles_pdf))
+
+        return bsd
 
     def get_bsd(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
         """
@@ -289,28 +311,28 @@ class BubbleModel(object):
         """
 
         if not self.bubbles_Rfree:
-            bsd, Rb = self._get_bsd_from_nb(Q=Q, sigma_b=sigma_b, n_b=n_b)
-            return bsd
+            R_b = self._get_Rb_from_nb(Q=Q, sigma_b=sigma_b, n_b=n_b)
 
-        if self.bubbles_pdf == 'lognormal':
-            logRarr = np.log(self.tab_R)
-            logRb = np.log(R_b)
-            n_b = np.exp(-(logRarr - logRb)**2 / 2. / sigma_b**2)
-        elif self.bubbles_pdf == 'plexp':
-            n_b = (self.tab_R / R_b)**(3.0+sigma_b) * np.exp(-self.tab_R / R_b)
-        else:
-            raise NotImplemented("Unrecognized `bubbles_pdf`: {}".format(
-                self.bubbles_pdf))
+        # Should cache bsd too.
+        _bsd = self._get_bsd_unnormalized(Q=Q, R_b=R_b, sigma_b=sigma_b,
+            n_b=n_b)
 
-        integ = n_b * 4 * np.pi * self.tab_R**3 / 3.
+        integ = _bsd * 4 * np.pi * self.tab_R**3 / 3.
         norm = 1. / integ.max()
+        integ = np.trapz(integ * self.tab_R * norm,
+            x=np.log(self.tab_R)) / norm
 
-        _Q_ = np.trapz(integ * self.tab_R * norm, x=np.log(self.tab_R)) / norm
+        if self.approx_small_Q:
+            corr = Q / integ
+        else:
+            # In this case, normalize n_b such that
+            # 1 - \exp{\int n_b V_b dR} = Q
+            corr = -1 * np.log(1 - Q) / integ
 
-        # Normalize to provided ionized fraction.
-        n_b *= Q / _Q_
+        # Normalize to provided ionized fraction
+        bsd = _bsd * corr
 
-        return n_b
+        return bsd
 
     def get_bsd_cdf(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
         """
@@ -339,14 +361,20 @@ class BubbleModel(object):
 
         if exclusion:
             V = 4. * np.pi * self.tab_R**3 / 3.
-            integ = np.trapz(n_b * (V - V_o) * self.tab_R, x=np.log(self.tab_R))
+            integ = np.trapz(n_b * (V - V_o) * self.tab_R,
+                x=np.log(self.tab_R))
         else:
             integ = np.trapz(n_b * V_o * self.tab_R, x=np.log(self.tab_R))
 
         if self.approx_small_Q:
-            return integ
+            P1 = integ
         else:
-            return 1. - np.exp(-integ)
+            P1 = 1. - np.exp(-integ)
+
+        if self.include_P1_corr:
+            P1 *= (1. - Q)
+
+        return P1
 
     def get_P2(self, d, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, xi_bb=0.):
         """
@@ -363,7 +391,8 @@ class BubbleModel(object):
 
         V = 4. * np.pi * self.tab_R**3 / 3.
 
-        integ1 = np.trapz(n_b * (V - V_o) * self.tab_R, x=np.log(self.tab_R))
+        integ1 = np.trapz(n_b * (V - V_o) * self.tab_R,
+            x=np.log(self.tab_R))
         integ2 = np.trapz(n_b * (V - V_o) * (1. + xi_bb) * self.tab_R,
             x=np.log(self.tab_R))
 
@@ -395,12 +424,13 @@ class BubbleModel(object):
 
         return V_o
 
-    def get_bb(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, separate=False):
+    def get_bb(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+        separate=False, **_kw_):
         """
         Comptute <bb'> following bare-bones FZH04 model.
         """
 
-        if Q == 0:
+        if Q == 0 or (not self.bubbles):
             return np.zeros_like(self.tab_R)
 
         pb = ProgressBar(self.tab_R.size, use=self.use_pbar,
@@ -424,8 +454,8 @@ class BubbleModel(object):
         else:
             return P1 + (1. - P1) * P2
 
-    def get_bn(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, separate=False):
-        bb = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
+    def get_bn(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+        separate=False, **_kw_):
 
         P1e = [self.get_P1(RR, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b,
             exclusion=1) for RR in self.tab_R]
@@ -436,7 +466,7 @@ class BubbleModel(object):
         else:
             return P1e * (1. - Q)
 
-    def get_dd(self, z):
+    def get_dd(self, z, **_kw_):
         """
         Get the matter correlation function, equivalent to <dd'>.
 
@@ -455,7 +485,8 @@ class BubbleModel(object):
         self._cache_dd_[z] = dd
         return dd
 
-    def get_bd(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, bbar=1, bhbar=1):
+    def get_bd(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, bbar=1,
+        bhbar=1, **_kw_):
         """
         Get the cross correlation function between bubbles and density, equivalent to <bd'>.
 
@@ -509,17 +540,11 @@ class BubbleModel(object):
 
         return var
 
-    def get_bubble_density(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+    def get_bubble_density(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+        **_kw_):
         """
         Return mean density in ionized regions.
         """
-
-        # Hack
-        #if Q <= 0.1:
-        #    return 1. * (2. / R_b)**0.25
-        #else:
-        #    return 1. * (2. / R_b)**0.25 * (np.exp((1. - Q)**2) - 1) \
-        #        / (np.exp((1. - 0.1)**2) - 1)
 
         if self.use_volume_match == 1:
             bsd = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
@@ -529,13 +554,13 @@ class BubbleModel(object):
             Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 2:
             Rsm = R_b
-        elif self.use_volume_match == 3:
+        elif self.use_volume_match == 10:
             bb1, bb2 = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b,
                 separate=True)
             bb = bb1 + bb2
             P1_frac = bb1 / bb
             Rsm = np.interp(0.75, P1_frac[-1::-1], self.tab_R[-1::-1])
-        elif self.use_volume_match == 4:
+        elif self.use_volume_match == 11:
             bb1, bb2 = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b,
                 separate=True)
             bb = bb1 + bb2
@@ -564,8 +589,12 @@ class BubbleModel(object):
         norm = quad(lambda x: Pofx(x), x_thresh, np.inf,
             limit=100000)[0]
 
+        # Sanity check: do numerically
+        #del_i = quad(lambda x: Pofx(x) * x, x_thresh, np.inf)[0]
+
         if self.density_pdf.lower() in ['normal', 'gaussian']:
-            del_i = np.exp(-x_thresh**2 / 2. / w**2) * w / np.sqrt(2 * np.pi)
+            del_i = np.exp(-x_thresh**2 / 2. / w**2) * w \
+                / np.sqrt(2 * np.pi)
         else:
             del_i = 0.5 * (-1. + np.exp(w**2 / 2.) \
                 * (1. + erf((w**2 - x_thresh) / np.sqrt(2.) / w)) \
@@ -573,8 +602,15 @@ class BubbleModel(object):
 
         return del_i / norm
 
-    def get_cross_terms(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, n_b=None,
-        beta=1., delta_ion=0., separate=False):
+    def get_cross_terms(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
+        n_b=None, beta=1., delta_ion=0., separate=False, **_kw_):
+
+        if not self.include_cross_terms:
+            arr = np.zeros_like(self.tab_R)
+            if separate:
+                return [arr]* 6
+            else:
+                return arr
 
         bb = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         bn = self.get_bn(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
@@ -588,26 +624,19 @@ class BubbleModel(object):
         else:
             d_i = delta_ion
 
+        # Currently neglects terms containing b and b' (other than <bb'>)
         if self.include_cross_terms == 1:
             d_n = -d_i * Q / (1. - Q)
             bd = d_i * bb + d_n * bn
-            #bd = bb_1 * d_i
-            #bd = np.minimum(dd, bd)
-            bd_1pt = d_i * Q
-
-            bbd = d_i * bb
-            #bdd = d_i * dd
+            bd_1pt = bbd = bbdd = np.zeros_like(self.tab_R)
             bdd = d_i * d_i * bb + d_i * d_n * bn
-            bbdd = bb * d_i**2
         elif self.include_cross_terms == 2:
             d_n = -d_i * Q / (1. - Q)
-            bd = d_i * bb + d_n * bn#d_i * dd
-            #bd = bb_1 * d_i
-            #bd = np.minimum(dd, bd)
+            bd = d_i * bb + d_n * bn
             bd_1pt = d_i * Q
 
             bbd = d_i * bb
-            bdd = d_i * Q * dd
+            bdd = d_i * d_i * bb + d_i * d_n * bn
             bbdd = bb * d_i**2
         else:
             raise NotImplemented('Only know include_cross_terms=1!')
@@ -621,8 +650,8 @@ class BubbleModel(object):
                 + alpha**2 * bbdd \
                 - 2 * alpha**2 * Q * bd_1pt - alpha**2 * bd_1pt**2
 
-    def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, n_b=None,
-        delta_ion=0.):
+    def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
+        n_b=None, delta_ion=0.):
 
         bb = self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         dd = self.get_dd(z)
@@ -632,12 +661,7 @@ class BubbleModel(object):
 
         dTb = self.get_dTb_bulk(z, Ts=Ts)
 
-        if self.approx_small_Q:
-            _Q_ = Q
-        else:
-            _Q_ = Q#(1. - np.exp(-Q))**2
-
-        avg_term = alpha**2 * _Q_**2
+        avg_term = alpha**2 * Q**2
 
         cf_21 = bb * alpha**2 + dd - avg_term
 
@@ -647,14 +671,14 @@ class BubbleModel(object):
             cf_21 += dd * (2 * CT / con + (CT / con)**2)
 
         if self.include_cross_terms:
-            new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b,
-                delta_ion=delta_ion, separate=False)
+            new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
+                n_b=n_b, delta_ion=delta_ion, separate=False)
             cf_21 += new
 
         return dTb**2 * cf_21
 
-    def get_ps_21cm(self, z, k, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1, n_b=None,
-        delta_ion=0.):
+    def get_ps_21cm(self, z, k, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
+        n_b=None, delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q == 0.):

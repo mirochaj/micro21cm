@@ -23,7 +23,7 @@ from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_Rfree=True,
-        include_adiabatic_fluctuations=True, include_P1_corr=False,
+        include_adiabatic_fluctuations=True, include_P1_corr=True,
         include_cross_terms=0, include_rsd=False, include_mu_gt=-1.,
         use_volume_match=1,
         Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='lognormal',
@@ -351,28 +351,31 @@ class BubbleModel(object):
         pdf = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
-    def get_P1(self, d, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, exclusion=0):
+    def get_P1(self, d, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, exclusion=0,
+        use_corr=True):
         """
         Compute 1 bubble term.
         """
 
-        n_b = self.get_bsd(Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
+        bsd = self.get_bsd(Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
         if exclusion:
             V = 4. * np.pi * self.tab_R**3 / 3.
-            integ = np.trapz(n_b * (V - V_o) * self.tab_R,
+            integ = np.trapz(bsd * (V - V_o) * self.tab_R,
                 x=np.log(self.tab_R))
         else:
-            integ = np.trapz(n_b * V_o * self.tab_R, x=np.log(self.tab_R))
+            integ = np.trapz(bsd * V_o * self.tab_R, x=np.log(self.tab_R))
 
         if self.approx_small_Q:
             P1 = integ
         else:
             P1 = 1. - np.exp(-integ)
 
-        if self.include_P1_corr:
-            P1 *= (1. - Q)
+        if self.include_P1_corr and use_corr and (not exclusion):
+            P1e = self.get_P1(d, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b,
+                exclusion=1, use_corr=False)
+            P1 *= (1. - P1e)
 
         return P1
 
@@ -384,16 +387,14 @@ class BubbleModel(object):
         if not self.approx_small_Q:
             return Q**2
 
-        # Subtlety here with using Q as a free parameter.
-        # Re-visit this!
-        n_b = self.get_bsd(Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
+        bsd = self.get_bsd(Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
         V = 4. * np.pi * self.tab_R**3 / 3.
 
-        integ1 = np.trapz(n_b * (V - V_o) * self.tab_R,
+        integ1 = np.trapz(bsd * (V - V_o) * self.tab_R,
             x=np.log(self.tab_R))
-        integ2 = np.trapz(n_b * (V - V_o) * (1. + xi_bb) * self.tab_R,
+        integ2 = np.trapz(bsd * (V - V_o) * (1. + xi_bb) * self.tab_R,
             x=np.log(self.tab_R))
 
         if self.approx_small_Q:
@@ -614,7 +615,6 @@ class BubbleModel(object):
 
         bb = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         bn = self.get_bn(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
-
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
 
@@ -624,14 +624,20 @@ class BubbleModel(object):
         else:
             d_i = delta_ion
 
+        d_n = -d_i * Q / (1. - Q)
+
         # Currently neglects terms containing b and b' (other than <bb'>)
         if self.include_cross_terms == 1:
-            d_n = -d_i * Q / (1. - Q)
+            bd = d_i * bb + d_n * bn
+            bd_1pt = np.zeros_like(self.tab_R)
+            bbd = np.zeros_like(self.tab_R)
+            bbdd = Q**2 * dd#np.zeros_like(self.tab_R)
+            bdd = Q * dd #d_i * d_i * bb + d_i * d_n * bn
+        elif self.include_cross_terms == 2:
             bd = d_i * bb + d_n * bn
             bd_1pt = bbd = bbdd = np.zeros_like(self.tab_R)
             bdd = d_i * d_i * bb + d_i * d_n * bn
-        elif self.include_cross_terms == 2:
-            d_n = -d_i * Q / (1. - Q)
+        elif self.include_cross_terms == 3:
             bd = d_i * bb + d_n * bn
             bd_1pt = d_i * Q
 

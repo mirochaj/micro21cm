@@ -25,8 +25,8 @@ labels = \
  'k': r'$k / [h \ \mathrm{cMpc}^{-1}]$',
  'pofk': r'$P(k)$',
  'cf21': r'$\xi_{21}(R)$',
- 'delta_sq': r'$\Delta^2(k) \ [\mathrm{mK}^2]$',
- 'delta_sq_long': r'$k^3 \left(\frac{P(k)}{2\pi^2}\right) \ [\mathrm{mK}^2]$',
+ 'delta_sq': r'$\overline{\delta T_b}^2 \Delta^2(k) \ [\mathrm{mK}^2]$',
+ 'delta_sq_long': r'$\overline{\delta T_b}^2 k^3 \left(\frac{P(k)}{2\pi^2}\right) \ [\mathrm{mK}^2]$',
  'Ts': r'$T_S / \mathrm{K}$',
  'Q': r'$Q$',
  'Q_ion': r'$Q_{\mathrm{ion}}$',
@@ -317,4 +317,4 @@ def _error_2D_crude(L, nu=[0.95, 0.68]):
         Lencl_prev = Lencl_now
 
     # Return values that match up to inputs
-    return nu[-1::-1], np.array(contours[-1::-1])    
+    return nu[-1::-1], np.array(contours[-1::-1])

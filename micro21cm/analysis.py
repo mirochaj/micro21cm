@@ -22,53 +22,112 @@ _default_ls = ['-', '--', '-.', ':']
 def read_mcmc():
     pass
 
-def plot_triangle(flatchain, fig=1, elements=[0,1], complement=[False, True],
-    bins=20, burn=0, fig_kwargs={}, contours=True, fill=False, nu=[0.95, 0.68],
-    is_log=[False,False], **kwargs):
+def plot_triangle(flatchain, fig=1, elements=[0,1], complement=False,
+    bins=20, burn=0, fig_kwargs={}, contours=True, fill=False,
+    nu=[0.95, 0.68], take_log=False, is_log=False, labels=None,
+    **kwargs):
     """
 
     """
 
     fig = pl.figure(constrained_layout=True, num=fig, **fig_kwargs)
-    gs = fig.add_gridspec(2,2)
+    fig.subplots_adjust(hspace=0.05, wspace=0.05)
 
-    ax_p2 = fig.add_subplot(gs[0, 0])
-    ax_p1 = fig.add_subplot(gs[1, 1])
-    ax_2d = fig.add_subplot(gs[1, 0])
-
-    p1 = flatchain[burn:,elements[0]]
-    p2 = flatchain[burn:,elements[1]]
-
-    if is_log[0]:
-        p1 = 10**p1
-    if is_log[1]:
-        p2 = 10**p2
-    if complement[0]:
-        p1 = 1. - p1
-    if complement[1]:
-        p2 = 1. - p2
-
+    Np = len(elements)
+    gs = fig.add_gridspec(Np, Np)
 
     if type(bins) not in [list, tuple, np.ndarray]:
-        bins = [bins] * 2
+        bins = [bins] * Np
+    if type(complement) not in [list, tuple, np.ndarray]:
+        complement = [complement] * Np
+    if type(is_log) not in [list, tuple, np.ndarray]:
+        is_log = [is_log] * Np
+    if type(take_log) not in [list, tuple, np.ndarray]:
+        take_log = [take_log] * Np
 
-    if contours:
-        hist, be1, be2 = np.histogram2d(p1, p2, bins)
-        bc1 = bin_e2c(be1)
-        bc2 = bin_e2c(be2)
+    # Remember, for gridspec, rows are numbered frop top-down.
+    axes_by_row = [[] for i in range(Np)]
+    for i, row in enumerate(range(Np)):
+        for j, col in enumerate(range(Np)):
+            # Skip elements in upper triangle
+            if j > i:
+                continue
 
-        nu, levels = get_error_2d(p1, p2, hist, [bc1, bc2], nu=nu)
+            # Create axis
+            _ax = fig.add_subplot(gs[i,j])
+            axes_by_row[i].append(_ax)
 
-        ax_2d.contour(bc2, bc1, hist / hist.max(),
-            levels, zorder=4, **kwargs)
-    else:
-        h, x, y, img = ax_2d.hist2d(p2, p1, bins=bins[-1::-1], cmap='viridis',
-            norm=LogNorm())
+            # Retrieve data to be used in plot
+            if not is_log[i]:
+                p1 = 1. - flatchain[burn:,elements[i]] if complement[i] \
+                    else flatchain[burn:,elements[i]]
+            else:
+                p1 = 10**flatchain[burn:,elements[i]] if is_log[i] \
+                    else flatchain[burn:,elements[i]]
 
-    ax_p1.hist(p1, density=True, bins=bins[0])
-    ax_p2.hist(p2, density=True, bins=bins[1])
+            if take_log[i]:
+                p1 = np.log10(p1)
 
-    return fig, ax_p1, ax_p2, ax_2d
+            # 2-D PDFs from here on
+            if not is_log[j]:
+                p2 = 1. - flatchain[burn:,elements[j]] if complement[j] \
+                    else flatchain[burn:,elements[j]]
+            else:
+                p2 = 10**flatchain[burn:,elements[j]] if is_log[j] \
+                    else flatchain[burn:,elements[j]]
+
+            if take_log[j]:
+                p2 = np.log10(p2)
+
+            # 1-D PDFs
+            if i == j:
+                _ax.hist(p2, density=True, bins=bins[j])
+                if j > 0:
+                    _ax.set_yticklabels([])
+                    if j == Np - 1:
+                        _ax.set_xlabel(labels[j])
+                    else:
+                        _ax.set_xticklabels([])
+                else:
+                    _ax.set_ylabel(r'PDF')
+
+                _ax.set_xlim(p2.min(), p2.max())
+                continue
+
+            if contours:
+                hist, be2, be1 = np.histogram2d(p2, p1, [bins[j], bins[i]])
+                bc1 = bin_e2c(be1)
+                bc2 = bin_e2c(be2)
+
+                nu, levels = get_error_2d(p2, p1, hist, [bc2, bc1], nu=nu)
+
+                # (columns, rows, histogram)
+                if fill:
+                    _ax.contourf(bc2, bc1, hist.T / hist.max(),
+                        levels, zorder=4, **kwargs)
+                else:
+                    _ax.contour(bc2, bc1, hist.T / hist.max(),
+                        levels, zorder=4, **kwargs)
+            else:
+                h, x, y, img = _ax.hist2d(p2, p1, bins=[bins[j], bins[i]],
+                    cmap='viridis', norm=LogNorm())
+
+            # Get rid of labels/ticks on interior panels.
+            if i < Np - 1:
+                _ax.set_xticklabels([])
+            else:
+                _ax.set_xlabel(labels[j])
+
+            if j > 0:
+                _ax.set_yticklabels([])
+            else:
+                _ax.set_ylabel(labels[i])
+
+            _ax.set_ylim(p1.min(), p1.max())
+            _ax.set_xlim(p2.min(), p2.max())
+
+    # Done
+    return fig, axes_by_row
 
 def plot_ps(model=None, data=None, ax=None, fig=None, dimensionless=True,
     data_kwargs={}, model_kwargs={}, fig_kwargs={}, z=None, **kwargs):

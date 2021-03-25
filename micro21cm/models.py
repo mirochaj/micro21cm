@@ -47,9 +47,10 @@ class BubbleModel(object):
         bubbles_pdf : str
             Bubble size distribution. Will get normalized to volume-filling
             fraction Q automatically. Current options: 'lognormal' and
-            'plexp'. The two parameters Rb and sigma_b characterize the PDF, and
-            are the avg and rms of radii for 'lognormal'. For 'plexp' Rb is the
-            critical radius, and sigma_b is a power-law index added to the usual 3.
+            'plexp'. The two parameters Rb and sigma_b characterize the PDF,
+            and are the avg and rms of radii for 'lognormal'. For 'plexp' Rb
+            is the critical radius, and sigma_b is a power-law index added to
+            the usual 3.
 
         Array Setup
         -----------
@@ -292,6 +293,16 @@ class BubbleModel(object):
 
         return bsd
 
+    def _cache_bsd(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+        if not hasattr(self, '_cache_bsd_'):
+            self._cache_bsd_ = {}
+
+        key = (Q, R_b, sigma_b, n_b)
+        if key in self._cache_bsd_:
+            return self._cache_bsd_[key]
+
+        return None
+
     def get_bsd(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
         """
         Compute the bubble size distribution (BSD).
@@ -309,6 +320,10 @@ class BubbleModel(object):
             this is the power-law slope (minus 3).
 
         """
+
+        cached_bsd = self._cache_bsd(Q, R_b, sigma_b, n_b)
+        if cached_bsd is not None:
+            return cached_bsd
 
         if not self.bubbles_Rfree:
             R_b = self._get_Rb_from_nb(Q=Q, sigma_b=sigma_b, n_b=n_b)
@@ -531,11 +546,12 @@ class BubbleModel(object):
         Return the variance in the matter field at redshift `z` when smoothing
         on scale `R`.
         """
+
         Pofk = lambda k: self.get_ps_matter(z, k)
         Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) / (k * R)**3
 
-        integrand = lambda k: Pofk(k) * np.abs(Wofk(k)**2) * 4. * np.pi * k**2 \
-            / (2. * np.pi)**3
+        integrand = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
+            * 4. * np.pi * k**2 / (2. * np.pi)**3
 
         var = quad(integrand, 0, np.inf, limit=100000)[0]
 
@@ -633,11 +649,11 @@ class BubbleModel(object):
             bbd = np.zeros_like(self.tab_R)
             bbdd = Q**2 * dd#np.zeros_like(self.tab_R)
             bdd = Q * dd #d_i * d_i * bb + d_i * d_n * bn
-        elif self.include_cross_terms == 2:
+        elif self.include_cross_terms == 3:
             bd = d_i * bb + d_n * bn
             bd_1pt = bbd = bbdd = np.zeros_like(self.tab_R)
             bdd = d_i * d_i * bb + d_i * d_n * bn
-        elif self.include_cross_terms == 3:
+        elif self.include_cross_terms == 2:
             bd = d_i * bb + d_n * bn
             bd_1pt = d_i * Q
 

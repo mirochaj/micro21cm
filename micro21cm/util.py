@@ -21,7 +21,7 @@ except ImportError:
 
 labels = \
 {
- 'R': r'$R / [h^{-1} \ \mathrm{Mpc}]$',
+ 'R': r'$R / [\mathrm{Mpc} \ h^{-1}]$',
  'k': r'$k / [h \ \mathrm{cMpc}^{-1}]$',
  'pofk': r'$P(k)$',
  'cf21': r'$\xi_{21}(R)$',

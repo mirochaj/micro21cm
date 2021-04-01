@@ -758,7 +758,7 @@ class BubbleModel(object):
         return mod / (1. - mu)
 
     def get_rsd_boost_mu_sq(self, mu):
-        # This is just \int_{\mu_{\min}}^1 d\mu \mu^2)
+        # This is just \int_{\mu_{\min}}^1 d\mu (1 + \mu^2)
         mod = (1. - mu) + 1. * (1. - mu**3) / 3.
         # Full correction has factor of 1/2 and weighting by 1/(1 - mu)
         return mod / (1. - mu)

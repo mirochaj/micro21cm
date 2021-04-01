@@ -728,6 +728,9 @@ class BubbleModel(object):
             if self.include_rsd:
                 ps_21 *= self.get_rsd_boost_dd(self.include_mu_gt)
 
+            # Homogeneous or completely random reionization
+            ps_21 *= (1. - Q)**2
+
         else:
             # In this case, if include_rsd==True, each term will carry
             # its own correction term, so we don't apply a correction

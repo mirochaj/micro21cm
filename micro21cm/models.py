@@ -647,8 +647,8 @@ class BubbleModel(object):
             bd = d_i * bb + d_n * bn
             bd_1pt = np.zeros_like(self.tab_R)
             bbd = np.zeros_like(self.tab_R)
-            bbdd = Q**2 * dd#np.zeros_like(self.tab_R)
             bdd = Q * dd #d_i * d_i * bb + d_i * d_n * bn
+            bbdd = Q**2 * dd#np.zeros_like(self.tab_R)
         elif self.include_cross_terms == 3:
             bd = d_i * bb + d_n * bn
             bd_1pt = bbd = bbdd = np.zeros_like(self.tab_R)
@@ -661,7 +661,13 @@ class BubbleModel(object):
             bdd = d_i * d_i * bb + d_i * d_n * bn
             bbdd = bb * d_i**2
         else:
-            raise NotImplemented('Only know include_cross_terms=1!')
+            raise NotImplemented('Only know include_cross_terms=1,2,3!')
+
+        # RSDs
+        if self.include_rsd:
+            bd *= self.get_rsd_boost_mu_sq(self.include_mu_gt)
+            bbdd *= self.get_rsd_boost_dd(self.include_mu_gt)
+            bdd *= self.get_rsd_boost_dd(self.include_mu_gt)
 
         if separate:
             return 2 * alpha * bd, 2 * alpha**2 * bbd, 2 * alpha * bdd, \
@@ -675,8 +681,8 @@ class BubbleModel(object):
     def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, delta_ion=0.):
 
-        bb = self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
-        dd = self.get_dd(z)
+        bb = 1 * self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
+        dd = 1 * self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
         con = self.get_contrast(z, Ts)
         CT = self.get_CT(z, Ts)
@@ -684,6 +690,11 @@ class BubbleModel(object):
         dTb = self.get_dTb_bulk(z, Ts=Ts)
 
         avg_term = alpha**2 * Q**2
+
+        if self.include_rsd:
+            dd *= self.get_rsd_boost_dd(self.include_mu_gt)
+            bb *= (1. - self.include_mu_gt)
+            avg_term *= (1. - self.include_mu_gt)
 
         cf_21 = bb * alpha**2 + dd - avg_term
 
@@ -713,7 +724,14 @@ class BubbleModel(object):
                 betam = 1.
 
             ps_21 = self.get_dTb_bulk(z, Ts=Ts)**2 * ps_mm * betam
+
+            if self.include_rsd:
+                ps_21 *= self.get_rsd_boost_dd(self.include_mu_gt)
+
         else:
+            # In this case, if include_rsd==True, each term will carry
+            # its own correction term, so we don't apply a correction
+            # explicitly here as we do above in the Q=0 density-driven limit.
             cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
                 n_b=n_b, delta_ion=delta_ion)
 
@@ -728,19 +746,23 @@ class BubbleModel(object):
             ps_21 = get_ps_from_cf(k, f_cf=f_cf, Rmin=self.tab_R.min(),
                 Rmax=self.tab_R.max())
 
-        #
-        if self.include_rsd:
-            ps_21 *= self.get_rsd_boost(self.include_mu_gt)
-
         return ps_21
 
-    def get_rsd_boost(self, mu):
-        # This is just \int_{\mu_{\min}}^1 (1 + \mu^2)^2
+    def get_rsd_boost_dd(self, mu):
+        # This is just \int_{\mu_{\min}}^1 d\mu (1 + \mu^2)^2
         mod = (1. - mu) + 2. * (1. - mu**3) / 3. + 0.2 * (1. - mu**5)
+        # Full correction has factor of 1/2 and weighting by 1/(1 - mu)
         return mod / (1. - mu)
 
-    def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.5, Ts=np.inf, R_b=5.,
-        sigma_b=0.1, n_b=None, beta=1., use_kdtree=True, include_rho=True):
+    def get_rsd_boost_mu_sq(self, mu):
+        # This is just \int_{\mu_{\min}}^1 d\mu \mu^2)
+        mod = (1. - mu) + 1. * (1. - mu**3) / 3.
+        # Full correction has factor of 1/2 and weighting by 1/(1 - mu)
+        return mod / (1. - mu)
+
+    def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.5, Ts=np.inf,
+        R_b=5., sigma_b=0.1, n_b=None, beta=1., use_kdtree=True,
+        include_rho=True):
         """
         Make a 3-d realization representative of this model.
 

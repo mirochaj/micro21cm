@@ -26,7 +26,7 @@ class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_Rfree=True,
         include_adiabatic_fluctuations=True, include_P1_corr=True,
-        include_cross_terms=1, include_rsd=True, include_mu_gt=-1.,
+        include_cross_terms=0, include_rsd=True, include_mu_gt=-1.,
         use_volume_match=1,
         Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='normal',
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
@@ -656,19 +656,21 @@ class BubbleModel(object):
     def get_cross_terms(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, beta=1., delta_ion=0., separate=False, **_kw_):
 
-        if not self.include_cross_terms:
-            arr = np.zeros_like(self.tab_R)
-            if separate:
-                return [arr]* 6
-            else:
-                return arr
+        #if not self.include_cross_terms:
+        #    arr = np.zeros_like(self.tab_R)
+        #    if separate:
+        #        return [arr]* 6
+        #    else:
+        #        return arr
 
         bb = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         bn = self.get_bn(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
 
-        if self.use_volume_match:
+        if not self.include_cross_terms:
+            d_i = 0
+        elif self.use_volume_match:
             d_i = self.get_bubble_density(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
                 n_b=n_b)
         else:
@@ -677,7 +679,13 @@ class BubbleModel(object):
         d_n = -d_i * Q / (1. - Q)
 
         # Currently neglects terms containing b and b' (other than <bb'>)
-        if self.include_cross_terms == 1:
+        if self.include_cross_terms == 0:
+            bd = np.zeros_like(self.tab_R)
+            bd_1pt = np.zeros_like(self.tab_R)
+            bbd = np.zeros_like(self.tab_R)
+            bdd = Q * dd
+            bbdd = bb * dd
+        elif self.include_cross_terms == 1:
             bd = d_i * bb + d_n * bn
             bd_1pt = np.zeros_like(self.tab_R)
             bbd = np.zeros_like(self.tab_R)
@@ -698,10 +706,16 @@ class BubbleModel(object):
             raise NotImplemented('Only know include_cross_terms=1,2,3!')
 
         # RSDs
-        if self.include_rsd:
-            bd *= (1. - 1. / 3.)
-            bbdd *= (1. - 2. / 3. + 1. / 9.)
-            bdd *= (1. - 2. / 3. + 1. / 9.)
+        if self.include_rsd == 1:
+            d_over_dv = -1. / 3.
+        elif self.include_rsd == 2:
+            d_over_dv = -1.
+        else:
+            d_over_dv = 0.0
+
+        bd *= (1. - d_over_dv)
+        bbdd *= (1. - 2. * d_over_dv + d_over_dv**2)
+        bdd *= (1. - 2. * d_over_dv + d_over_dv**2)
 
         if separate:
             return 2 * alpha * bd, 2 * alpha**2 * bbd, 2 * alpha * bdd, \
@@ -737,10 +751,9 @@ class BubbleModel(object):
         if self.include_adiabatic_fluctuations:
             cf_21 += dd * (2 * CT / con + (CT / con)**2)
 
-        if self.include_cross_terms:
-            new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
-                n_b=n_b, delta_ion=delta_ion, separate=False)
-            cf_21 += new
+        new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
+            n_b=n_b, delta_ion=delta_ion, separate=False)
+        cf_21 += new
 
         return dTb**2 * cf_21
 

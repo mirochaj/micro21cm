@@ -20,13 +20,15 @@ from scipy.special import erfcinv, erf, erfc
 from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
     Tgadiabaticfit
 
+tiny_Q = 1e-3
+
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_Rfree=True,
         include_adiabatic_fluctuations=True, include_P1_corr=True,
-        include_cross_terms=0, include_rsd=False, include_mu_gt=-1.,
+        include_cross_terms=1, include_rsd=True, include_mu_gt=-1.,
         use_volume_match=1,
-        Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='lognormal',
+        Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='normal',
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
         use_pbar=False, approx_small_Q=False, approx_linear=True):
@@ -185,6 +187,12 @@ class BubbleModel(object):
 
     def get_Tcmb(self, z):
         return self.cosmo.TCMB * (1. + z)
+
+    def get_dTb_avg(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+        Ts=np.inf):
+        bd = self.get_bubble_density(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
+            n_b=n_b) * Q
+        return self.get_dTb_bulk(z, Ts=Ts) * (1. - Q - bd)
 
     def get_dTb_bulk(self, z, Ts=np.inf):
         """
@@ -548,7 +556,8 @@ class BubbleModel(object):
         """
 
         Pofk = lambda k: self.get_ps_matter(z, k)
-        Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) / (k * R)**3
+        Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) \
+            / (k * R)**3
 
         integrand = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
             * 4. * np.pi * k**2 / (2. * np.pi)**3
@@ -557,11 +566,22 @@ class BubbleModel(object):
 
         return var
 
-    def get_bubble_density(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+    def get_density_threshold(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
         **_kw_):
         """
-        Return mean density in ionized regions.
+        Use "volume matching" to determine density level above which
+        gas is ionized.
+
+        Returns
+        -------
+        Both the density of bubbles and sigma_R of the density field
+        smoothed on the appropriate scale.
+
         """
+
+        # Hack!
+        if (Q < tiny_Q) or (Q == 1):
+            return -1, 0.0
 
         if self.use_volume_match == 1:
             bsd = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
@@ -599,15 +619,24 @@ class BubbleModel(object):
 
         # Eq. 33
         x_thresh = np.sqrt(2) * w * erfcinv(2 * Q)
-        Pofx = lambda x: np.exp(-x**2 / 2. / w**2) \
-            / np.sqrt(2 * np.pi) / w
 
-        # Could do this analytically too.
-        norm = quad(lambda x: Pofx(x), x_thresh, np.inf,
-            limit=100000)[0]
+        return x_thresh, w
 
-        # Sanity check: do numerically
-        #del_i = quad(lambda x: Pofx(x) * x, x_thresh, np.inf)[0]
+    def get_bubble_density(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+        **_kw_):
+        """
+        Return mean density in ionized regions.
+        """
+
+        # Hack!
+        if (Q < tiny_Q) or (Q == 1):
+            return 0.0
+
+        x_thresh, w = self.get_density_threshold(z, Q=Q, R_b=R_b,
+            sigma_b=sigma_b, n_b=n_b, **_kw_)
+
+        # Normalization factor
+        norm = 0.5 * erfc(x_thresh / w / np.sqrt(2.))
 
         if self.density_pdf.lower() in ['normal', 'gaussian']:
             del_i = np.exp(-x_thresh**2 / 2. / w**2) * w \
@@ -616,6 +645,11 @@ class BubbleModel(object):
             del_i = 0.5 * (-1. + np.exp(w**2 / 2.) \
                 * (1. + erf((w**2 - x_thresh) / np.sqrt(2.) / w)) \
                 + erf(x_thresh / np.sqrt(2.) / w))
+
+        # Sanity checks: do numerically
+        #norm = quad(lambda x: Pofx(x), x_thresh, np.inf,
+        #    limit=100000)[0]
+        #del_i = quad(lambda x: Pofx(x) * x, x_thresh, np.inf)[0]
 
         return del_i / norm
 
@@ -649,10 +683,6 @@ class BubbleModel(object):
             bbd = np.zeros_like(self.tab_R)
             bdd = Q * dd #d_i * d_i * bb + d_i * d_n * bn
             bbdd = Q**2 * dd#np.zeros_like(self.tab_R)
-        elif self.include_cross_terms == 3:
-            bd = d_i * bb + d_n * bn
-            bd_1pt = bbd = bbdd = np.zeros_like(self.tab_R)
-            bdd = d_i * d_i * bb + d_i * d_n * bn
         elif self.include_cross_terms == 2:
             bd = d_i * bb + d_n * bn
             bd_1pt = d_i * Q
@@ -660,14 +690,18 @@ class BubbleModel(object):
             bbd = d_i * bb
             bdd = d_i * d_i * bb + d_i * d_n * bn
             bbdd = bb * d_i**2
+        elif self.include_cross_terms == 3:
+            bd = d_i * bb + d_n * bn
+            bd_1pt = bbd = bbdd = np.zeros_like(self.tab_R)
+            bdd = d_i * d_i * bb + d_i * d_n * bn
         else:
             raise NotImplemented('Only know include_cross_terms=1,2,3!')
 
         # RSDs
         if self.include_rsd:
-            bd *= self.get_rsd_boost_mu_sq(self.include_mu_gt)
-            bbdd *= self.get_rsd_boost_dd(self.include_mu_gt)
-            bdd *= self.get_rsd_boost_dd(self.include_mu_gt)
+            bd *= (1. - 1. / 3.)
+            bbdd *= (1. - 2. / 3. + 1. / 9.)
+            bdd *= (1. - 2. / 3. + 1. / 9.)
 
         if separate:
             return 2 * alpha * bd, 2 * alpha**2 * bbd, 2 * alpha * bdd, \
@@ -714,7 +748,7 @@ class BubbleModel(object):
         n_b=None, delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
-        if (not self.bubbles) or (Q == 0.):
+        if (not self.bubbles) or (Q < tiny_Q):
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
             if self.include_adiabatic_fluctuations:
                 con = self.get_contrast(z, Ts)
@@ -723,13 +757,13 @@ class BubbleModel(object):
             else:
                 betam = 1.
 
-            ps_21 = self.get_dTb_bulk(z, Ts=Ts)**2 * ps_mm * betam
+            Tavg = self.get_dTb_avg(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
+                n_b=n_b)
+            ps_21 = Tavg**2 * ps_mm * betam
 
             if self.include_rsd:
                 ps_21 *= self.get_rsd_boost_dd(self.include_mu_gt)
 
-            # Homogeneous or completely random reionization
-            ps_21 *= (1. - Q)**2
 
         else:
             # In this case, if include_rsd==True, each term will carry
@@ -757,7 +791,7 @@ class BubbleModel(object):
         # Full correction has factor of 1/2 and weighting by 1/(1 - mu)
         return mod / (1. - mu)
 
-    def get_rsd_boost_mu_sq(self, mu):
+    def get_rsd_boost_d(self, mu):
         # This is just \int_{\mu_{\min}}^1 d\mu (1 + \mu^2)
         mod = (1. - mu) + 1. * (1. - mu**3) / 3.
         # Full correction has factor of 1/2 and weighting by 1/(1 - mu)

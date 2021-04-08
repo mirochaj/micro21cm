@@ -706,16 +706,21 @@ class BubbleModel(object):
             raise NotImplemented('Only know include_cross_terms=1,2,3!')
 
         # RSDs
+        # In all of these approaches, we're doing the average over \mu
+        # here straight-away.
         if self.include_rsd == 1:
-            d_over_dv = -1. / 3.
+            corr1 = self.get_rsd_boost_d(self.include_mu_gt)
+            corr2 = self.get_rsd_boost_dd(self.include_mu_gt)
         elif self.include_rsd == 2:
-            d_over_dv = -1.
+            mu_sq_avg = np.sqrt(self.get_rsd_boost_dd(-1) - 1)
+            corr1 = (1. + mu_sq_avg)
+            corr2 = (1. + mu_sq_avg)**2
         else:
-            d_over_dv = 0.0
+            corr1 = corr2 = 1.
 
-        bd *= (1. - d_over_dv)
-        bbdd *= (1. - 2. * d_over_dv + d_over_dv**2)
-        bdd *= (1. - 2. * d_over_dv + d_over_dv**2)
+        bd *= corr1
+        bdd *= corr2
+        bbdd *= corr2
 
         if separate:
             return 2 * alpha * bd, 2 * alpha**2 * bbd, 2 * alpha * bdd, \
@@ -777,7 +782,6 @@ class BubbleModel(object):
             if self.include_rsd:
                 ps_21 *= self.get_rsd_boost_dd(self.include_mu_gt)
 
-
         else:
             # In this case, if include_rsd==True, each term will carry
             # its own correction term, so we don't apply a correction
@@ -801,13 +805,13 @@ class BubbleModel(object):
     def get_rsd_boost_dd(self, mu):
         # This is just \int_{\mu_{\min}}^1 d\mu (1 + \mu^2)^2
         mod = (1. - mu) + 2. * (1. - mu**3) / 3. + 0.2 * (1. - mu**5)
-        # Full correction has factor of 1/2 and weighting by 1/(1 - mu)
+        # Full correction weighted by 1/(1 - mu)
         return mod / (1. - mu)
 
     def get_rsd_boost_d(self, mu):
         # This is just \int_{\mu_{\min}}^1 d\mu (1 + \mu^2)
         mod = (1. - mu) + 1. * (1. - mu**3) / 3.
-        # Full correction has factor of 1/2 and weighting by 1/(1 - mu)
+        # Full correction weighted by 1/(1 - mu)
         return mod / (1. - mu)
 
     def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.5, Ts=np.inf,

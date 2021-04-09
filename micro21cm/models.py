@@ -28,7 +28,7 @@ class BubbleModel(object):
         include_adiabatic_fluctuations=True, include_P1_corr=True,
         include_cross_terms=0, include_rsd=True, include_mu_gt=-1.,
         use_volume_match=1,
-        Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='normal',
+        Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='lognormal',
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
         use_pbar=False, approx_small_Q=False, approx_linear=True):
@@ -159,7 +159,7 @@ class BubbleModel(object):
         # if self.bubbles:
         #     return 0.0 #we do not include it for the cases with bubbles, only for density (revisit)
         # else:
-        return CTfit(z) * min(1.0,Ts/self.get_Tgas(z))
+        return CTfit(z) * min(1.0,self.get_Tgas(z)/Ts)
 
     def get_contrast(self, z, Ts):
         return 1. - self.get_Tcmb(z) / Ts
@@ -737,8 +737,6 @@ class BubbleModel(object):
         bb = 1 * self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         dd = 1 * self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
-        con = self.get_contrast(z, Ts)
-        CT = self.get_CT(z, Ts)
 
         dTb = self.get_dTb_bulk(z, Ts=Ts)
 
@@ -754,6 +752,10 @@ class BubbleModel(object):
         # Include correlations in density and temperature caused by
         # adiabatic expansion/contraction.
         if self.include_adiabatic_fluctuations:
+            con = self.get_contrast(z, Ts)
+            CT = self.get_CT(z, Ts)
+            # Note: one factor of dd already included above, hence the lack
+            # of a (1 + 2 CT / con + (CT / con)**2) term as in the text.
             cf_21 += dd * (2 * CT / con + (CT / con)**2)
 
         new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
@@ -771,7 +773,7 @@ class BubbleModel(object):
             if self.include_adiabatic_fluctuations:
                 con = self.get_contrast(z, Ts)
                 CT = self.get_CT(z, Ts)
-                betam = 1. + (2 * CT / con + (CT / con)**2)
+                betam = 1. + 2 * CT / con + (CT / con)**2
             else:
                 betam = 1.
 

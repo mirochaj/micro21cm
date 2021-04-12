@@ -696,23 +696,24 @@ class BubbleModel(object):
         # RSDs
         # In all of these approaches, we're doing the average over \mu
         # here straight-away.
-        if self.include_rsd == 1:
-            corr1 = (1. + beta_phi + self.get_rsd_int_mu2(self.include_mu_gt))
-            corr2 = beta_sq
-        elif self.include_rsd == 2:
-            mu_sq_avg = np.sqrt(self.get_rsd_boost_dd(-1) - 1)
-            corr1 = (1. + beta_phi + mu_sq_avg)
-            corr2 = (1. + beta_phi + mu_sq_avg)**2
-        elif self.include_rsd == 3:
-            mu_sq_avg = 1.
-            corr1 = (1. + beta_phi + mu_sq_avg)
-            corr2 = (1. + beta_phi + mu_sq_avg)**2
-        else:
-            corr1 = corr2 = 1.
-
-        bd *= corr1
-        bdd *= corr2
-        bbdd *= corr2
+        #if self.include_rsd == 1:
+        #    corr1 = (1. + beta_phi + self.get_rsd_int_mu2(self.include_mu_gt))
+        #    corr2 = beta_sq
+        #elif self.include_rsd == 2:
+        #    mu_sq_avg = np.sqrt(self.get_rsd_boost_dd(-1) - 1)
+        #    corr1 = (1. + beta_phi + mu_sq_avg)
+        #    corr2 = (1. + beta_phi + mu_sq_avg)**2
+        #elif self.include_rsd == 3:
+        #    mu_sq_avg = 1.
+        #    corr1 = (1. + beta_phi + mu_sq_avg)
+        #    corr2 = (1. + beta_phi + mu_sq_avg)**2
+        #else:
+        #    corr1 = 1. + beta_phi
+        #    corr2 = (1. + beta_phi)**2
+#
+        #bd *= corr1
+        #bdd *= corr2
+        #bbdd *= corr2
 
         if separate:
             return 2 * alpha * bd, 2 * alpha**2 * bbd, 2 * alpha * bdd, \
@@ -748,14 +749,14 @@ class BubbleModel(object):
         beta_p = self.get_beta_phi(z, Ts)
         beta_T = self.get_beta_T(z, Ts)
 
-        if self.include_rsd:
+        if self.include_rsd == 1:
             beta_mu_sq = self.get_rsd_boost_dd(self.include_mu_gt)
-            intmu2 = self.get_rsd_int_mu2(self.include_mu_gt)
+        elif self.include_rsd == 2:
+            beta_mu_sq = self.get_rsd_boost_dd(self.include_mu_gt)
+        elif self.include_rsd == 3:
+            beta_mu_sq = 2.
         else:
-            beta_mu_sq = 1
-            intmu2 = 0.0
-
-        beta_mu_T = 2 * beta_T * intmu2 * self.include_adiabatic_fluctuations
+            beta_mu_sq = 1.
 
         return beta_p, np.sqrt(beta_mu_sq)
 
@@ -774,17 +775,19 @@ class BubbleModel(object):
         # adiabatic expansion/contraction.
         beta_phi, beta_mu = self.get_betas(z, Ts)
 
-        #if self.include_rsd:
-        #    bb *= (1. - self.include_mu_gt)
-        #    avg_term *= (1. - self.include_mu_gt)
-
-        dd *= (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
+        dd *= (beta_mu + beta_phi)**2
 
         cf_21 = bb * alpha**2 + dd - avg_term
 
-        new = self.get_cross_terms(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
-            n_b=n_b, delta_ion=delta_ion, separate=False)
-        cf_21 += new
+        bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
+            self.get_cross_terms(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
+            n_b=n_b, delta_ion=delta_ion, separate=True)
+
+        bd *= (beta_mu + beta_phi)
+        bdd *= (beta_mu + beta_phi)**2
+        bbdd *= (beta_mu + beta_phi)**2
+
+        cf_21 += bd + bbd + bdd + bbdd + bbd_1pt + bd_1pt
 
         return dTb**2 * cf_21
 

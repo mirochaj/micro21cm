@@ -155,15 +155,6 @@ class BubbleModel(object):
         else:
             return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
-    def get_CT(self,z,Ts):
-        # if self.bubbles:
-        #     return 0.0 #we do not include it for the cases with bubbles, only for density (revisit)
-        # else:
-        return CTfit(z) * min(1.0,self.get_Tgas(z)/Ts)
-
-    def get_contrast(self, z, Ts):
-        return 1. - self.get_Tcmb(z) / Ts
-
     #def get_phi(self, z, Ts):
     #    return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
@@ -656,17 +647,12 @@ class BubbleModel(object):
     def get_cross_terms(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, beta=1., delta_ion=0., separate=False, **_kw_):
 
-        #if not self.include_cross_terms:
-        #    arr = np.zeros_like(self.tab_R)
-        #    if separate:
-        #        return [arr]* 6
-        #    else:
-        #        return arr
 
         bb = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         bn = self.get_bn(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
+        beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
 
         if not self.include_cross_terms:
             d_i = 0
@@ -683,14 +669,14 @@ class BubbleModel(object):
             bd = np.zeros_like(self.tab_R)
             bd_1pt = np.zeros_like(self.tab_R)
             bbd = np.zeros_like(self.tab_R)
-            bdd = Q * dd
-            bbdd = bb * dd
+            bdd = Q * dd * beta_d**2
+            bbdd = bb * dd * beta_d**2
         elif self.include_cross_terms == 1:
             bd = d_i * bb + d_n * bn
             bd_1pt = np.zeros_like(self.tab_R)
             bbd = np.zeros_like(self.tab_R)
-            bdd = Q * dd #d_i * d_i * bb + d_i * d_n * bn
-            bbdd = Q**2 * dd#np.zeros_like(self.tab_R)
+            bdd = Q * dd * beta_d**2
+            bbdd = Q**2 * dd * beta_d**2
         elif self.include_cross_terms == 2:
             bd = d_i * bb + d_n * bn
             bd_1pt = d_i * Q
@@ -709,12 +695,12 @@ class BubbleModel(object):
         # In all of these approaches, we're doing the average over \mu
         # here straight-away.
         if self.include_rsd == 1:
-            corr1 = self.get_rsd_boost_d(self.include_mu_gt)
-            corr2 = self.get_rsd_boost_dd(self.include_mu_gt)
+            corr1 = (1. + beta_d + self.get_rsd_int_mu2(self.include_mu_gt))
+            corr2 = (beta_mu + (beta_d**2 - 1) + beta_mu_T)
         elif self.include_rsd == 2:
             mu_sq_avg = np.sqrt(self.get_rsd_boost_dd(-1) - 1)
-            corr1 = (1. + mu_sq_avg)
-            corr2 = (1. + mu_sq_avg)**2
+            corr1 = (1. + beta_d + mu_sq_avg)
+            corr2 = (1. + mu_sq_avg + (beta_d**2 - 1) + 2 * beta_T * mu_sq_avg)
         else:
             corr1 = corr2 = 1.
 
@@ -731,6 +717,45 @@ class BubbleModel(object):
                 + alpha**2 * bbdd \
                 - 2 * alpha**2 * Q * bd_1pt - alpha**2 * bd_1pt**2
 
+    def get_CT(self,z,Ts):
+        # if self.bubbles:
+        #     return 0.0 #we do not include it for the cases with bubbles, only for density (revisit)
+        # else:
+        return CTfit(z) * min(1.0, self.get_Tgas(z) / Ts)
+
+    def get_contrast(self, z, Ts):
+        return 1. - self.get_Tcmb(z) / Ts
+
+    def get_beta_T(self, z, Ts):
+        if not self.include_adiabatic_fluctuations:
+            return 0.0
+
+        con = self.get_contrast(z, Ts)
+        corr = Ts / self.get_Tcmb(z)
+        CT = self.get_CT(z, Ts)
+        return CT / con / corr
+
+    def get_beta_d(self, z, Ts):
+        return 1. + self.get_beta_T(z, Ts)
+
+    def get_betas(self, z, Ts):
+        if self.include_adiabatic_fluctuations:
+            beta_d = self.get_beta_d(z, Ts)
+            beta_T = self.get_beta_T(z, Ts)
+        else:
+            beta_d = beta_T = 1
+
+        if self.include_rsd:
+            beta_mu = self.get_rsd_boost_dd(self.include_mu_gt)
+            intmu2 = self.get_rsd_int_mu2(self.include_mu_gt)
+        else:
+            beta_mu = 1
+            intmu2 = 0.0
+
+        beta_mu_T = 2 * beta_T * intmu2 * self.include_adiabatic_fluctuations
+
+        return beta_d, beta_T, beta_mu, beta_mu_T
+
     def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, delta_ion=0.):
 
@@ -742,23 +767,19 @@ class BubbleModel(object):
 
         avg_term = alpha**2 * Q**2
 
+        # Include correlations in density and temperature caused by
+        # adiabatic expansion/contraction.
+        beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
+
         if self.include_rsd:
-            dd *= self.get_rsd_boost_dd(self.include_mu_gt)
             bb *= (1. - self.include_mu_gt)
             avg_term *= (1. - self.include_mu_gt)
 
+        dd *= (beta_mu + (beta_d**2 - 1) + beta_mu_T)
+
         cf_21 = bb * alpha**2 + dd - avg_term
 
-        # Include correlations in density and temperature caused by
-        # adiabatic expansion/contraction.
-        if self.include_adiabatic_fluctuations:
-            con = self.get_contrast(z, Ts)
-            CT = self.get_CT(z, Ts)
-            # Note: one factor of dd already included above, hence the lack
-            # of a (1 + 2 CT / con + (CT / con)**2) term as in the text.
-            cf_21 += dd * (2 * CT / con + (CT / con)**2)
-
-        new = self.get_cross_terms(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
+        new = self.get_cross_terms(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
             n_b=n_b, delta_ion=delta_ion, separate=False)
         cf_21 += new
 
@@ -770,19 +791,13 @@ class BubbleModel(object):
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q < tiny_Q):
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
-            if self.include_adiabatic_fluctuations:
-                con = self.get_contrast(z, Ts)
-                CT = self.get_CT(z, Ts)
-                betam = 1. + 2 * CT / con + (CT / con)**2
-            else:
-                betam = 1.
+            beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
+            beta_sq = (beta_mu + (beta_d**2 - 1) + beta_mu_T)
 
             Tavg = self.get_dTb_avg(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
                 n_b=n_b)
-            ps_21 = Tavg**2 * ps_mm * betam
 
-            if self.include_rsd:
-                ps_21 *= self.get_rsd_boost_dd(self.include_mu_gt)
+            ps_21 = Tavg**2 * ps_mm * beta_sq
 
         else:
             # In this case, if include_rsd==True, each term will carry
@@ -815,6 +830,9 @@ class BubbleModel(object):
         mod = (1. - mu) + 1. * (1. - mu**3) / 3.
         # Full correction weighted by 1/(1 - mu)
         return mod / (1. - mu)
+
+    def get_rsd_int_mu2(self, mu):
+        return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
     def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.5, Ts=np.inf,
         R_b=5., sigma_b=0.1, n_b=None, beta=1., use_kdtree=True,

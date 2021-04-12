@@ -772,12 +772,11 @@ class BubbleModel(object):
 
         # Include correlations in density and temperature caused by
         # adiabatic expansion/contraction.
-        #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
         beta_phi, beta_mu = self.get_betas(z, Ts)
 
-        if self.include_rsd:
-            bb *= (1. - self.include_mu_gt)
-            avg_term *= (1. - self.include_mu_gt)
+        #if self.include_rsd:
+        #    bb *= (1. - self.include_mu_gt)
+        #    avg_term *= (1. - self.include_mu_gt)
 
         dd *= (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
 

@@ -652,7 +652,9 @@ class BubbleModel(object):
         bn = self.get_bn(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         dd = self.get_dd(z)
         alpha = self.get_alpha(z, Ts)
-        beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
+        #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
+        beta_phi, beta_mu = self.get_betas(z, Ts)
+        beta_sq = (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
 
         if not self.include_cross_terms:
             d_i = 0
@@ -669,14 +671,14 @@ class BubbleModel(object):
             bd = np.zeros_like(self.tab_R)
             bd_1pt = np.zeros_like(self.tab_R)
             bbd = np.zeros_like(self.tab_R)
-            bdd = Q * dd * beta_d**2
-            bbdd = bb * dd * beta_d**2
+            bdd = Q * dd
+            bbdd = bb * dd
         elif self.include_cross_terms == 1:
             bd = d_i * bb + d_n * bn
             bd_1pt = np.zeros_like(self.tab_R)
             bbd = np.zeros_like(self.tab_R)
-            bdd = Q * dd * beta_d**2
-            bbdd = Q**2 * dd * beta_d**2
+            bdd = Q * dd
+            bbdd = Q**2 * dd
         elif self.include_cross_terms == 2:
             bd = d_i * bb + d_n * bn
             bd_1pt = d_i * Q
@@ -695,12 +697,16 @@ class BubbleModel(object):
         # In all of these approaches, we're doing the average over \mu
         # here straight-away.
         if self.include_rsd == 1:
-            corr1 = (1. + beta_d + self.get_rsd_int_mu2(self.include_mu_gt))
-            corr2 = (beta_mu + (beta_d**2 - 1) + beta_mu_T)
+            corr1 = (1. + beta_phi + self.get_rsd_int_mu2(self.include_mu_gt))
+            corr2 = beta_sq
         elif self.include_rsd == 2:
             mu_sq_avg = np.sqrt(self.get_rsd_boost_dd(-1) - 1)
-            corr1 = (1. + beta_d + mu_sq_avg)
-            corr2 = (1. + mu_sq_avg + (beta_d**2 - 1) + 2 * beta_T * mu_sq_avg)
+            corr1 = (1. + beta_phi + mu_sq_avg)
+            corr2 = (1. + beta_phi + mu_sq_avg)**2
+        elif self.include_rsd == 3:
+            mu_sq_avg = 1.
+            corr1 = (1. + beta_phi + mu_sq_avg)
+            corr2 = (1. + beta_phi + mu_sq_avg)**2
         else:
             corr1 = corr2 = 1.
 
@@ -727,6 +733,9 @@ class BubbleModel(object):
         return 1. - self.get_Tcmb(z) / Ts
 
     def get_beta_T(self, z, Ts):
+        return self.get_CT(z, Ts)
+
+    def get_beta_phi(self, z, Ts):
         if not self.include_adiabatic_fluctuations:
             return 0.0
 
@@ -735,26 +744,20 @@ class BubbleModel(object):
         CT = self.get_CT(z, Ts)
         return CT / con / corr
 
-    def get_beta_d(self, z, Ts):
-        return 1. + self.get_beta_T(z, Ts)
-
     def get_betas(self, z, Ts):
-        if self.include_adiabatic_fluctuations:
-            beta_d = self.get_beta_d(z, Ts)
-            beta_T = self.get_beta_T(z, Ts)
-        else:
-            beta_d = beta_T = 1
+        beta_p = self.get_beta_phi(z, Ts)
+        beta_T = self.get_beta_T(z, Ts)
 
         if self.include_rsd:
-            beta_mu = self.get_rsd_boost_dd(self.include_mu_gt)
+            beta_mu_sq = self.get_rsd_boost_dd(self.include_mu_gt)
             intmu2 = self.get_rsd_int_mu2(self.include_mu_gt)
         else:
-            beta_mu = 1
+            beta_mu_sq = 1
             intmu2 = 0.0
 
         beta_mu_T = 2 * beta_T * intmu2 * self.include_adiabatic_fluctuations
 
-        return beta_d, beta_T, beta_mu, beta_mu_T
+        return beta_p, np.sqrt(beta_mu_sq)
 
     def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, delta_ion=0.):
@@ -769,13 +772,14 @@ class BubbleModel(object):
 
         # Include correlations in density and temperature caused by
         # adiabatic expansion/contraction.
-        beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
+        #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
+        beta_phi, beta_mu = self.get_betas(z, Ts)
 
         if self.include_rsd:
             bb *= (1. - self.include_mu_gt)
             avg_term *= (1. - self.include_mu_gt)
 
-        dd *= (beta_mu + (beta_d**2 - 1) + beta_mu_T)
+        dd *= (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
 
         cf_21 = bb * alpha**2 + dd - avg_term
 
@@ -791,9 +795,10 @@ class BubbleModel(object):
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q < tiny_Q):
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
-            beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
-            beta_sq = (beta_mu + (beta_d**2 - 1) + beta_mu_T)
-
+            #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
+            #beta_sq = (beta_mu + (beta_d**2 - 1) + beta_mu_T)
+            beta_phi, beta_mu = self.get_betas(z, Ts)
+            beta_sq = (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
             Tavg = self.get_dTb_avg(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
                 n_b=n_b)
 

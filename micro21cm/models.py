@@ -89,12 +89,12 @@ class BubbleModel(object):
         self.approx_linear = approx_linear
         self.density_pdf = density_pdf
 
-        self.params = ['Ts']
+        self.params = ['Ts', 'Q']
         if self.bubbles:
             if self.bubbles_Rfree:
-                self.params.extend(['Q', 'R_b', 'sigma_b'])
+                self.params.extend(['R_b', 'sigma_b'])
             else:
-                self.params.extend(['Q', 'n_b', 'sigma_b'])
+                self.params.extend(['n_b', 'sigma_b'])
 
         self.transfer_params = \
             {
@@ -179,7 +179,7 @@ class BubbleModel(object):
     def get_Tcmb(self, z):
         return self.cosmo.TCMB * (1. + z)
 
-    def get_dTb_avg(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+    def get_dTb_avg(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None,
         Ts=np.inf):
         bd = self.get_bubble_density(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
             n_b=n_b) * Q
@@ -200,7 +200,7 @@ class BubbleModel(object):
                 self.NR)
         return self._tab_R
 
-    def _get_Rb_from_nb(self, Q=0.5, sigma_b=0.1, n_b=None,
+    def _get_Rb_from_nb(self, Q=0.0, sigma_b=0.1, n_b=None,
         Qtol=1e-6, maxiter=10000):
 
         # Need to do this iteratively.
@@ -278,7 +278,7 @@ class BubbleModel(object):
 
         return self._cache_Rb[(Q, sigma_b, n_b, Qtol)]
 
-    def _get_bsd_unnormalized(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+    def _get_bsd_unnormalized(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None):
         logRarr = np.log(self.tab_R)
         logRb = np.log(R_b)
         if self.bubbles_pdf == 'lognormal':
@@ -292,7 +292,7 @@ class BubbleModel(object):
 
         return bsd
 
-    def _cache_bsd(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+    def _cache_bsd(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None):
         if not hasattr(self, '_cache_bsd_'):
             self._cache_bsd_ = {}
 
@@ -302,7 +302,7 @@ class BubbleModel(object):
 
         return None
 
-    def get_bsd(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+    def get_bsd(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None):
         """
         Compute the bubble size distribution (BSD).
 
@@ -348,7 +348,7 @@ class BubbleModel(object):
 
         return bsd
 
-    def get_bsd_cdf(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+    def get_bsd_cdf(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None):
         """
         Compute the cumulative distribution function for the bubble size dist.
         """
@@ -358,14 +358,14 @@ class BubbleModel(object):
 
         return cdf / cdf[-1]
 
-    def get_nb(self, Q=0.5, R_b=5., sigma_b=0.1, n_b=None):
+    def get_nb(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None):
         """
         Compute the number density of bubbles [(h / Mpc)^3].
         """
         pdf = self.get_bsd(Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
-    def get_P1(self, d, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, exclusion=0,
+    def get_P1(self, d, Q=0.0, R_b=5., sigma_b=0.1, n_b=None, exclusion=0,
         use_corr=True):
         """
         Compute 1 bubble term.
@@ -393,7 +393,7 @@ class BubbleModel(object):
 
         return P1
 
-    def get_P2(self, d, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, xi_bb=0.):
+    def get_P2(self, d, Q=0.0, R_b=5., sigma_b=0.1, n_b=None, xi_bb=0.):
         """
         Compute 2 bubble term.
         """
@@ -439,7 +439,7 @@ class BubbleModel(object):
 
         return V_o
 
-    def get_bb(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+    def get_bb(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None,
         separate=False, **_kw_):
         """
         Comptute <bb'> following bare-bones FZH04 model.
@@ -469,7 +469,7 @@ class BubbleModel(object):
         else:
             return P1 + (1. - P1) * P2
 
-    def get_bn(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+    def get_bn(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None,
         separate=False, **_kw_):
 
         P1e = [self.get_P1(RR, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b,
@@ -500,7 +500,7 @@ class BubbleModel(object):
         self._cache_dd_[z] = dd
         return dd
 
-    def get_bd(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, bbar=1,
+    def get_bd(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None, bbar=1,
         bhbar=1, **_kw_):
         """
         Get the cross correlation function between bubbles and density, equivalent to <bd'>.
@@ -527,7 +527,7 @@ class BubbleModel(object):
 
         return bd
 
-    def r_bd(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None, bbar=1, bhbar=1):
+    def r_bd(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None, bbar=1, bhbar=1):
         """
         Normalize the cross correlation
 
@@ -557,7 +557,7 @@ class BubbleModel(object):
 
         return var
 
-    def get_density_threshold(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+    def get_density_threshold(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None,
         **_kw_):
         """
         Use "volume matching" to determine density level above which
@@ -613,7 +613,7 @@ class BubbleModel(object):
 
         return x_thresh, w
 
-    def get_bubble_density(self, z, Q=0.5, R_b=5., sigma_b=0.1, n_b=None,
+    def get_bubble_density(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None,
         **_kw_):
         """
         Return mean density in ionized regions.
@@ -644,7 +644,7 @@ class BubbleModel(object):
 
         return del_i / norm
 
-    def get_cross_terms(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
+    def get_cross_terms(self, z, Q=0.0, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, beta=1., delta_ion=0., separate=False, **_kw_):
 
 
@@ -760,7 +760,7 @@ class BubbleModel(object):
 
         return beta_p, np.sqrt(beta_mu_sq)
 
-    def get_cf_21cm(self, z, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
+    def get_cf_21cm(self, z, Q=0.0, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, delta_ion=0.):
 
         bb = 1 * self.get_bb(z, Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
@@ -791,16 +791,14 @@ class BubbleModel(object):
 
         return dTb**2 * cf_21
 
-    def get_ps_21cm(self, z, k, Q=0.5, Ts=np.inf, R_b=5., sigma_b=0.1,
+    def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q < tiny_Q):
             ps_mm = np.array([self.get_ps_matter(z, kk) for kk in k])
-            #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
-            #beta_sq = (beta_mu + (beta_d**2 - 1) + beta_mu_T)
             beta_phi, beta_mu = self.get_betas(z, Ts)
-            beta_sq = (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
+            beta_sq = (beta_mu + beta_phi)**2
             Tavg = self.get_dTb_avg(z, Q=Q, Ts=Ts, R_b=R_b, sigma_b=sigma_b,
                 n_b=n_b)
 
@@ -841,7 +839,7 @@ class BubbleModel(object):
     def get_rsd_int_mu2(self, mu):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
-    def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.5, Ts=np.inf,
+    def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
         R_b=5., sigma_b=0.1, n_b=None, beta=1., use_kdtree=True,
         include_rho=True):
         """

@@ -22,19 +22,23 @@ _default_ls = ['-', '--', '-.', ':']
 def read_mcmc():
     pass
 
-def plot_triangle(flatchain, fig=1, elements=[0,1], complement=False,
-    bins=20, burn=0, fig_kwargs={}, contours=True, fill=False,
-    nu=[0.95, 0.68], take_log=False, is_log=False, labels=None,
-    **kwargs):
+def plot_triangle(flatchain, fig=1, axes=None, elements=[0,1],
+    complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
+    fill=False, nu=[0.95, 0.68], take_log=False, is_log=False, labels=None,
+    skip=None, **kwargs):
     """
 
     """
 
-    fig = pl.figure(constrained_layout=True, num=fig, **fig_kwargs)
-    fig.subplots_adjust(hspace=0.05, wspace=0.05)
+    has_ax = axes is not None
+
+    if not has_ax:
+        fig = pl.figure(constrained_layout=True, num=fig, **fig_kwargs)
+        fig.subplots_adjust(hspace=0.05, wspace=0.05)
+    else:
+        axes_by_row = axes
 
     Np = len(elements)
-    gs = fig.add_gridspec(Np, Np)
 
     if type(bins) not in [list, tuple, np.ndarray]:
         bins = [bins] * Np
@@ -46,16 +50,28 @@ def plot_triangle(flatchain, fig=1, elements=[0,1], complement=False,
         take_log = [take_log] * Np
 
     # Remember, for gridspec, rows are numbered frop top-down.
-    axes_by_row = [[] for i in range(Np)]
+    if not has_ax:
+        gs = fig.add_gridspec(Np, Np)
+        axes_by_row = [[] for i in range(Np)]
+
     for i, row in enumerate(range(Np)):
         for j, col in enumerate(range(Np)):
             # Skip elements in upper triangle
             if j > i:
                 continue
 
+            if skip is not None:
+                if i in skip:
+                    continue
+                if j in skip:
+                    continue
+
             # Create axis
-            _ax = fig.add_subplot(gs[i,j])
-            axes_by_row[i].append(_ax)
+            if not has_ax:
+                _ax = fig.add_subplot(gs[i,j])
+                axes_by_row[i].append(_ax)
+            else:
+                _ax = axes_by_row[i][j]
 
             # Retrieve data to be used in plot
             if not is_log[i]:
@@ -81,7 +97,11 @@ def plot_triangle(flatchain, fig=1, elements=[0,1], complement=False,
 
             # 1-D PDFs
             if i == j:
-                _ax.hist(p2, density=True, bins=bins[j])
+                kw = kwargs.copy()
+                if 'colors' in kw:
+                    del kw['colors']
+                _ax.hist(p2, density=True, bins=bins[j], histtype='step', **kw)
+
                 if j > 0:
                     _ax.set_yticklabels([])
                     if j == Np - 1:
@@ -91,7 +111,8 @@ def plot_triangle(flatchain, fig=1, elements=[0,1], complement=False,
                 else:
                     _ax.set_ylabel(r'PDF')
 
-                _ax.set_xlim(p2.min(), p2.max())
+                ok = np.isfinite(p2)
+                _ax.set_xlim(p2[ok==1].min(), p2[ok==1].max())
                 continue
 
             if contours:
@@ -123,8 +144,10 @@ def plot_triangle(flatchain, fig=1, elements=[0,1], complement=False,
             else:
                 _ax.set_ylabel(labels[i])
 
-            _ax.set_ylim(p1.min(), p1.max())
-            _ax.set_xlim(p2.min(), p2.max())
+            ok1 = np.isfinite(p1)
+            ok2 = np.isfinite(p2)
+            _ax.set_ylim(p1[ok1==1].min(), p1[ok1==1].max())
+            _ax.set_xlim(p2[ok2==1].min(), p2[ok2==1].max())
 
     # Done
     return fig, axes_by_row

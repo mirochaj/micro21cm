@@ -201,7 +201,7 @@ class BubbleModel(object):
         return self._tab_R
 
     def _get_Rb_from_nb(self, Q=0.0, sigma_b=0.1, n_b=None,
-        Qtol=1e-6, maxiter=10000):
+        Qtol=1e-6, maxiter=10000, **_kw_):
 
         # Need to do this iteratively.
 
@@ -302,7 +302,7 @@ class BubbleModel(object):
 
         return None
 
-    def get_bsd(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None):
+    def get_bsd(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None, **_kw_):
         """
         Compute the bubble size distribution (BSD).
 

@@ -53,13 +53,46 @@ class BubbleModel(object):
             and are the avg and rms of radii for 'lognormal'. For 'plexp' Rb
             is the critical radius, and sigma_b is a power-law index added to
             the usual 3.
-
-        Array Setup
-        -----------
-        Rmin, Rmax : float
-            Limits of configuration space integrals.
+        bubbles_Rfree : bool
+            If True, the characteristic bubble size, R_b, will be treated
+            as the free parameter. This means that the bubble density will
+            be determined automatically to obtain the requested Q. If False,
+            the bubble density, n_b, will be the free parameter, and R_b
+            will be determined iteratively to ensure the BSD integrates to Q.
+        include_adiabatic_fluctuations : bool
+            If True, inclue a correction factor that accounts for the fact
+            that density and kinetic temperature are correlated. Uses
+            fitting formulae from Muñoz et al. (2015). See Secton 2.2 in
+            Mirocha, Munoz et al. (2021) for details.
+        include_rsd : int, bool
+            Include simple treatment of redshift space distortions?
+        include_mu_gt : float
+            If include_rsd > 0, this sets the lower-bound of the integral
+            that averages the 3-D power spectrum over \mu.
+        include_P1_corr : bool
+            If True, apply "kludge" to one bubble terms in order to guarantee
+            that fluctuations vanish as Q -> 1.
+        include_cross_terms : bool, int
+            If > 0, will allow terms involving both ionization and density to
+            be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2021) for
+            details.
+        density_pdf : str
+            Sets functional form of 1-D PDF of density field. Only options
+            are normal and lognormal. Affects computation of cross-terms
+            (see previous parameter).
+        use_volume_match : bool, int
+            Determines method used to find characteristic density of ionized
+            bubbles, if include_cross_terms > 0. Should probably just use
+            a value of 1, in which case we can deprecate this parameter.
+            Currently it just determines what scale is used to smooth the
+            density field.
+        Rmin, Rmax: float
+            Bounds of configuration space distance array, self.tab_R. This
+            is used for the computation of all correlation functions and
+            real-space ensemble averages. Units: cMpc / h.
         NR : int
-            Number of R bins to use.
+            Number of grid points to use between Rmin and Rmax.
+
 
         Cosmology
         ---------
@@ -142,12 +175,24 @@ class BubbleModel(object):
         return self._cosmo_
 
     def get_Tcmb(self, z):
+        """ Return the CMB temperature at redshift `z` in K."""
         return self.cosmo.TCMB * (1. + z)
 
     def get_Tgas(self, z):
+        """
+        Return the gas temperature of an unheated IGM in K.
+
+        .. note :: Uses fit to results of recombination code. Just pull
+            from CAMB.
+
+        """
         return Tgadiabaticfit(z)
 
     def get_alpha(self, z, Ts):
+        """
+        Return value of alpha, the parameter the controls whether bubbles
+        are assumed to be fully ionized or fully heated.
+        """
         if not self.bubbles:
             return 0.
         elif self.bubbles_ion:
@@ -155,17 +200,10 @@ class BubbleModel(object):
         else:
             return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
-    #def get_phi(self, z, Ts):
-    #    return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
-
-    #def get_betam(self,z,Ts):
-    #    #bias, \delta T21 = betam \delta_m
-    #    # if self.bubbles:
-    #    #     return 1.0 #we do not include it for the cases with bubbles, only for density (revisit). Bias 1 in this case.
-    #    # else:
-    #    return 1.0 + self.get_CT(z,Ts) * self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
-
     def get_ps_matter(self, z, k):
+        """
+        Return matter power spectrum, P(k), at redshift `z` on scale `k`.
+        """
         if not hasattr(self, '_matter_ps_'):
             self._init_cosmology()
 
@@ -176,11 +214,17 @@ class BubbleModel(object):
 
         return self._matter_ps_.P(z, k)
 
-    def get_Tcmb(self, z):
-        return self.cosmo.TCMB * (1. + z)
-
     def get_dTb_avg(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None,
         Ts=np.inf):
+        """
+        Return volume-averaged 21-cm brightness temperature, i.e., the
+        global 21-cm signal.
+
+        .. note :: This is different from `get_dTb_bulk` (see next function)
+            because appropriately weights by volume, and accounts for
+            cross-correlations between ionization and density.
+
+        """
         bd = self.get_bubble_density(z, Q=Q, R_b=R_b, sigma_b=sigma_b,
             n_b=n_b) * Q
         return self.get_dTb_bulk(z, Ts=Ts) * (1. - Q - bd)
@@ -202,7 +246,12 @@ class BubbleModel(object):
 
     def _get_Rb_from_nb(self, Q=0.0, sigma_b=0.1, n_b=None,
         Qtol=1e-6, maxiter=10000, **_kw_):
-
+        """
+        If self.bubbles_Rfree == False, it means the bubble abundance, n_b,
+        is our free parameter. In this case, we must iteratively solve for
+        the characteristic bubble size needed to guarantee that our BSD
+        integrates to Q.
+        """
         # Need to do this iteratively.
 
         if not hasattr(self, '_cache_Rb'):
@@ -279,6 +328,9 @@ class BubbleModel(object):
         return self._cache_Rb[(Q, sigma_b, n_b, Qtol)]
 
     def _get_bsd_unnormalized(self, Q=0.0, R_b=5., sigma_b=0.1, n_b=None):
+        """
+        Return an unnormalized version of the bubble size distribution.
+        """
         logRarr = np.log(self.tab_R)
         logRb = np.log(R_b)
         if self.bubbles_pdf == 'lognormal':
@@ -306,6 +358,14 @@ class BubbleModel(object):
         """
         Compute the bubble size distribution (BSD).
 
+        This is normalized so that:
+
+        if self.approx_small_Q:
+            \int bsd(R) V(R) dR = Q
+        else:
+            1 - \exp{-\int bsd(R) V(R) dR} = Q
+
+
         Parameters
         ----------
         Q : int, float
@@ -314,9 +374,9 @@ class BubbleModel(object):
             Typical bubble size [cMpc / h].
         sigma_b : int, float
             Another free parameter whose meaning depends on value of
-            `bubbles_pdf` attribute set in constructor. For default `lognormal`
-            BSD, this characterizes the width of the distribution. For `plexp`
-            this is the power-law slope (minus 3).
+            `bubbles_pdf` attribute set in constructor. For default
+            `lognormal` BSD, this characterizes the width of the
+            distribution. For `plexp` this is the power-law slope (minus 3).
 
         """
 
@@ -442,7 +502,7 @@ class BubbleModel(object):
     def get_bb(self, z, Q=0.0, R_b=5., sigma_b=0.1, n_b=None,
         separate=False, **_kw_):
         """
-        Comptute <bb'> following bare-bones FZH04 model.
+        Comptute <bb'> following FZH04 model.
         """
 
         if Q == 0 or (not self.bubbles):
@@ -487,6 +547,11 @@ class BubbleModel(object):
 
         .. note :: Will cache for given redshift `z` to save time.
 
+        .. note :: Acceptance of keyword arguments _kw_ is just so that
+            every routine in this class won't crash if given, e.g., the
+            spin temperature. That way we can create a dictionary of
+            kwargs for a given model and pass it to any method.
+
         """
 
         if not hasattr(self, '_cache_dd_'):
@@ -504,7 +569,6 @@ class BubbleModel(object):
         bhbar=1, **_kw_):
         """
         Get the cross correlation function between bubbles and density, equivalent to <bd'>.
-
         """
 
         dd = self.get_dd(z)
@@ -542,8 +606,8 @@ class BubbleModel(object):
 
     def get_variance_matter(self, z, R):
         """
-        Return the variance in the matter field at redshift `z` when smoothing
-        on scale `R`.
+        Return the variance in the matter field at redshift `z` when
+        smoothing on scale `R`.
         """
 
         Pofk = lambda k: self.get_ps_matter(z, k)
@@ -646,7 +710,19 @@ class BubbleModel(object):
 
     def get_cross_terms(self, z, Q=0.0, Ts=np.inf, R_b=5., sigma_b=0.1,
         n_b=None, beta=1., delta_ion=0., separate=False, **_kw_):
+        """
+        Compute all terms that involve bubble field and density field.
 
+        Parameters
+        ----------
+        separate : bool
+            If True, will return each term separately. To unpack results, do,
+            e.g.,
+
+                bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
+                    model.get_cross_terms(z, separate=True, **kwargs)
+
+        """
 
         bb = self.get_bb(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)
         bn = self.get_bn(z, Q=Q, R_b=R_b, sigma_b=sigma_b, n_b=n_b)

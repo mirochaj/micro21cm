@@ -26,9 +26,9 @@ class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_Rfree=True,
         include_adiabatic_fluctuations=True, include_P1_corr=True,
-        include_cross_terms=0, include_rsd=True, include_mu_gt=-1.,
-        use_volume_match=1,
-        Rmin=1e-2, Rmax=1e3, NR=1000, density_pdf='lognormal',
+        include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
+        use_volume_match=1, density_pdf='lognormal',
+        Rmin=1e-2, Rmax=1e3, NR=1000,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
         use_pbar=False, approx_small_Q=False, approx_linear=True):

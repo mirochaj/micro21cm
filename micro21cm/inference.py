@@ -17,6 +17,7 @@ import emcee
 import pickle
 import numpy as np
 from scipy.special import erf
+from .models import BubbleModel
 
 try:
     from mpi4py import MPI
@@ -43,6 +44,14 @@ _guesses = \
  'sigma_b': (0.2, 0.8),
 }
 
+_bins = \
+{
+ 'Ts': np.arange(0, 500, 10),
+ 'Q': np.arange(-0.01, 1.01, 0.01),
+ 'R_b': np.arange(0, 50, 0.2),
+ 'sigma_b': np.arange(0.0, 1.0, 0.05),
+}
+
 _guesses_Q_tanh = {'p0': (6, 10), 'p1': (1, 4)}
 _guesses_R_pl = {'p0': (2., 4.), 'p1': (-2., -1.)}
 
@@ -59,6 +68,7 @@ fit_kwargs = \
  'Qfunc': None,
  'Rfunc': None,
 
+ 'kmin': 0.1,
  'kmax': 1,
  'kthin': None,
 
@@ -87,10 +97,40 @@ def power_law(z, norm, gamma):
 
 
 class FitHelper(object):
-    def __init__(self, data, **kwargs):
+    def __init__(self, data, data_err_func, **kwargs):
         self.data = data
+        self.data_err_func = data_err_func
         self.kwargs = fit_kwargs.copy()
         self.kwargs.update(kwargs)
+
+    @property
+    def model(self):
+        if not hasattr(self, '_model'):
+            kwargs_model = self.get_model_kwargs()
+            self._model = BubbleModel(**kwargs_model)
+
+        return self._model
+
+    @property
+    def fit_data(self):
+        if not hasattr(self, '_fit_data'):
+
+            data_to_fit = []
+            for h, _z_ in enumerate(self.fit_z):
+                _data = self.data['power'][self.get_zindex_in_data(_z_)]
+
+                # Should apply window function here
+                _noise, _a21 = self.data_err_func(_z_, self.tab_k)
+
+                ydat = _data['Deltasq21'][self.k_mask==0]
+                perr = _data['errDeltasq21'][self.k_mask==0]
+                yerr = _noise + _a21 * ydat + perr
+
+                data_to_fit.append([ydat, yerr])
+
+            self._fit_data = np.array(data_to_fit)
+
+        return self._fit_data
 
     def get_model_kwargs(self):
         kw = {}
@@ -106,8 +146,39 @@ class FitHelper(object):
         return kw
 
     @property
+    def tab_k(self):
+        if not hasattr(self, '_kblobs'):
+            kblobs = self.data['power'][0]['k']
+            kmin = self.kwargs['kmin']
+            kmax = self.kwargs['kmax']
+
+            k_ok = np.logical_and(kblobs >= kmin, kblobs <= kmax)
+            kblobs = kblobs[k_ok==1]
+
+            if self.kwargs['kthin'] is not None:
+                kblobs = kblobs[::int(self.kwargs['kthin'])]
+
+            self._kblobs = kblobs
+            mask = np.ones(self.data['power'][0]['k'].size, dtype=int)
+            for i, k in enumerate(self.data['power'][0]['k']):
+                if k not in kblobs:
+                    continue
+
+                mask[i] = 0
+
+            self._k_mask = mask
+
+        return self._kblobs
+
+    @property
+    def k_mask(self):
+        if not hasattr(self, '_k_mask'):
+            k = self.tab_k
+        return self._k_mask
+
+    @property
     def fit_zindex(self):
-        if not hasattr(self, '_fit_z'):
+        if not hasattr(self, '_fit_zindex'):
             fit_z = self.kwargs['fit_z']
 
             if type(fit_z) in [list, tuple, np.ndarray]:
@@ -115,12 +186,25 @@ class FitHelper(object):
             else:
                 fit_z = np.array([fit_z])
 
-            self._fit_z = np.array(fit_z, dtype=int)
+            self._fit_zindex = np.array(fit_z, dtype=int)
 
+        return self._fit_zindex
+
+    def get_z_from_index(self, i):
+        return self.data['z'][i]
+
+    def get_zindex_in_data(self, z, ztol=1e-3):
+        j = np.argmin(np.abs(z - self.data['z']))
+        assert abs(self.data['z'][j] - z) < ztol
+
+        return j
+
+    @property
+    def fit_z(self):
+        if not hasattr(self, '_fit_z'):
+            self._fit_z = np.array([self.get_z_from_index(i) \
+                for i in self.fit_zindex])
         return self._fit_z
-
-    def get_z_from_index(self, i, data):
-        return data['z'][i]
 
     @property
     def prefix(self):
@@ -211,8 +295,6 @@ class FitHelper(object):
 
         return self._func_R
 
-
-
     @property
     def num_parametric(self):
         if not hasattr(self, '_num_parametric'):
@@ -220,22 +302,28 @@ class FitHelper(object):
                 + (self.kwargs['Rfunc'] is not None)
         return self._num_parametric
 
-    def nparams(self, model):
-        N = (len(model.params) - self.num_parametric) * self.fit_zindex.size
+    @property
+    def nparams(self):
+
+        N = (len(self.model.params) - self.num_parametric) * self.fit_zindex.size
         N += self.num_parametric * 2
         return N
+
+    @property
+    def pinfo(self):
+        return self.get_param_info(self.model)
 
     def get_initial_walker_pos(self, model):
         nwalkers = self.kwargs['nwalkers']
 
-        pos = np.zeros((nwalkers, self.nparams(model)))
+        pos = np.zeros((nwalkers, self.nparams))
 
-        params, redshifts = self.get_param_info(model)
+        params, redshifts = self.get_param_info(self.model)
 
         for i, par in enumerate(params):
 
             # If parameterized, be careful
-            if redshifts[i] is None:
+            if np.isinf(redshifts[i]):
                 if par.startswith('Q'):
                     post = par[2:]
                     lo, hi = _guesses_Q_tanh[post]
@@ -285,7 +373,7 @@ class FitHelper(object):
         param_z = []
         param_names = []
         for i, iz in enumerate(self.fit_zindex):
-            _z_ = self.get_z_from_index(iz, self.data)
+            _z_ = self.get_z_from_index(iz)
 
             for j, par in enumerate(model.params):
 
@@ -300,13 +388,108 @@ class FitHelper(object):
 
         # If parameterizing Q or R, these will be at the end.
         if self.func_Q is not None:
-            param_z.extend([None]*2)
+            param_z.extend([-np.inf]*2)
             param_names.extend(['Q_p0', 'Q_p1'])
         if self.func_R is not None:
-            param_z.extend([None]*2)
+            param_z.extend([-np.inf]*2)
             param_names.extend(['R_p0', 'R_p1'])
 
         return param_names, param_z
+
+    def restart_from(self, fn):
+        """
+        Read previous output and generate new positions for walkers.
+        """
+
+        f = open(fn, 'rb')
+        data_pre = pickle.load(f)
+        f.close()
+
+        kwargs = self.kwargs
+
+        nwalkers_p, steps_p, pars_p = data_pre['chain'].shape
+        warning = 'Number of walkers must match to enable restart!'
+        warning += 'Previous run ({}) used {}'.format(fn, nwalkers_p)
+        assert nwalkers_p == kwargs['nwalkers'], warning
+        print("% Restarting from output {}.".format(fn))
+        print("% Will augment {} samples there with {} more.".format(
+            steps_p, kwargs['steps']))
+
+        # Set initial walker positions
+        pos = None
+        if kwargs['regroup_after']:
+            # Re-initialize all walkers to best points after some number of steps
+            if data_pre['chain'].shape[1] == kwargs['regroup_after']:
+                print("Re-positioning walkers around 10% best so far...")
+                # Take top 10% of walkers?
+                nw = kwargs['nwalkers']
+                numparam = data_pre['chain'].shape[-1]
+                top = int(0.1 * nw)
+
+
+                # Most recent step for all walkers
+                ibest = np.argsort(data_pre['lnprob'][:,-1])[-top:]
+
+                pos = np.zeros((nw, data_pre['chain'].shape[-1]))
+                for i in range(nw):
+                    j = ibest[i % top]
+                    # Add some random jitter?
+                    r = 1. + np.random.normal(scale=0.05, size=numparam)
+                    pos[i,:] = data_pre['chain'][j,-1,:] * r
+
+
+                pos = np.array(pos)
+
+
+        if pos is None:
+            pos = data_pre['chain'][:,-1,:]
+
+        return pos, data_pre
+
+    def save_data(self, fn, sampler, data_pre=None):
+        ##
+        # Write data
+        # micro21cm.inference.write_chain(sampler, data_pre)
+        if data_pre is not None:
+            chain = data_pre['chain']
+            fchain = data_pre['flatchain']
+            lnprob = data_pre['lnprob']
+            blobs = np.array(data_pre['blobs'])
+            facc = np.array(data_pre['facc'])
+
+            if not np.allclose(self.tab_k, data_pre['kblobs']):
+                raise ValueError("k-bins used in previous fit are different!")
+
+            # Happens if we only took one step before
+            if blobs.ndim == 2:
+                blobs = np.array([blobs])
+
+            # chain is (nwalkers, nsteps, nparams)
+            # blobs iss (nsteps, nwalkers, nparams)
+            data = {'chain': np.concatenate((chain, sampler.chain), axis=1),
+                'flatchain': np.concatenate((fchain, sampler.flatchain)),
+                'lnprob': np.concatenate((lnprob, sampler.lnprobability), axis=1),
+                'blobs': np.concatenate((blobs, np.array(sampler.blobs))),
+                'facc': np.concatenate((facc,
+                    np.array(sampler.acceptance_fraction))),
+                'kbins': self.tab_k, 'kblobs': self.tab_k,
+                'zfit': self.fit_z, 'data': self.fit_data,
+                'pinfo': self.pinfo,
+                'kwargs': self.kwargs}
+        else:
+            data = {'chain': sampler.chain, 'flatchain': sampler.flatchain,
+                'lnprob': sampler.lnprobability,
+                'blobs': np.array(sampler.blobs),
+                'facc': sampler.acceptance_fraction,
+                'kbins': self.tab_k, 'kblobs': self.tab_k,
+                'zfit': self.fit_z, 'data': self.fit_data,
+                'pinfo': self.pinfo,
+                'kwargs': self.kwargs}
+
+        with open(fn, 'wb') as f:
+            pickle.dump(data, f)
+
+        print("% Wrote {} at {}.".format(fn, time.ctime()))
 
     def get_param_dict(self, model, z, args, ztol=1e-3):
         """
@@ -367,7 +550,7 @@ class FitHelper(object):
         Q = []
         R = []
         for i, par in enumerate(params):
-            if redshifts[i] is None:
+            if np.isinf(redshifts[i]):
                 if par.startswith('Q'):
                     post = par[2:]
                     lo, hi = _priors_Q_tanh[post]

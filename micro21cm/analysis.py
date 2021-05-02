@@ -10,14 +10,175 @@ Description:
 
 """
 
+import pickle
 import numpy as np
 import matplotlib.pyplot as pl
-from matplotlib.colors import LogNorm
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import LogNorm, Normalize
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
 _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
+
+bbox = dict(facecolor='none', edgecolor='k', fc='w',
+        boxstyle='round,pad=0.3', alpha=0.9, zorder=1000)
+
+class AnalyzeFit(object):
+    def __init__(self, fn):
+        self.fn = fn
+
+    @property
+    def data(self):
+        if not hasattr(self, '_data'):
+            with open(self.fn, 'rb') as f:
+                self._data = pickle.load(f)
+
+        return self._data
+
+    def plot_walker_trajectories(self, burn=0, ax=None, fig=1, **kwargs):
+
+        params, redshifts = self.data['pinfo']
+
+        ncols = self.data['zfit'].size
+        nrows = ('Ts' in params) + ('sigma_b' in params) \
+            + ('Q' in params) + ('R_b' in params) \
+            + ('Q_p0' in params) + ('R_p0' in params)
+
+        if ax is None:
+            fig, axes = pl.subplots(nrows, ncols, num=fig,
+                figsize=(ncols * 4, nrows *4))
+
+        steps = np.arange(0, self.data['chain'].shape[1])
+
+        # This looks slow/lazy but it's to keep ordering.
+        punique = []
+        for i, par in enumerate(params):
+            if par in punique:
+                continue
+
+            punique.append(par)
+
+        zunique = np.unique(redshifts)
+        zunique = zunique[np.isfinite(zunique)]
+
+        for i, par in enumerate(params):
+
+            _z_ = redshifts[i]
+
+            # Special cases: parametric elements of model
+            if np.isinf(_z_):
+                if par.startswith('Q'):
+                    _i = -2
+                else:
+                    _i = -1
+
+                _j = int(par[-1])
+                ylab = par[0]
+
+                axes[_i][_j].annotate(par, (0.05, 0.95), bbox=bbox,
+                    xycoords='axes fraction', ha='left', va='top')
+
+            else:
+
+                _i = punique.index(par)
+                _j = np.argmin(np.abs(zunique - _z_))
+                ylab = par
+
+                axes[_i][_j].annotate(r'$z=%.2f$' % _z_, (0.05, 0.95),
+                    xycoords='axes fraction', ha='left', va='top',
+                    bbox=bbox)
+
+            chain = self.data['chain'][:,burn:,i]
+
+            axes[_i][_j].plot(steps, chain.T, **kwargs)
+
+            if _j == 0:
+                axes[_i][_j].set_ylabel(ylab)
+
+
+
+    def plot_ps(self, z=None, show_best=True, ax=None, fig=1, conflevel=0.68,
+        marker_kw={}, use_cbar=True, cmap='jet', **kwargs):
+        """
+        Plot the power spectrum saved on each step of the chain.
+        """
+        if ax is None:
+            fig, ax = pl.subplots(1, 1, num=fig)
+
+        norm = Normalize(vmin=min(self.data['zfit']),
+            vmax=max(self.data['zfit']))
+        cmap = ScalarMappable(norm=norm, cmap=cmap)
+        cmap.set_array([])
+
+        data = self.data
+        ibest = np.argwhere(data['lnprob'] == data['lnprob'].max())[0]
+        sh = data['blobs'].shape
+
+        if len(sh) == 4:
+            _ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2],sh[3]))
+
+            colors = 'k', 'b', 'm', 'c', 'y'
+            for i in range(sh[2]):
+                ps = _ps[:,i,:]
+
+                _z_ = self.data['zfit'][i]
+
+                if show_best:
+                    ax.plot(data['kblobs'], data['blobs'][ibest[1], ibest[0],i],
+                        color=cmap.to_rgba(_z_), **kwargs)
+                else:
+                    _lo = (1. - conflevel) * 100 / 2.
+                    _hi = 100 - _lo
+                    lo, hi = np.percentile(ps, (_lo, _hi), axis=0)
+                    ax.fill_between(data['kblobs'], lo, hi,
+                        color=cmap.to_rgba(_z_), **kwargs)
+
+        else:
+            ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2]))
+
+
+            lo, hi = np.percentile(ps, (2.5, 97.5), axis=0)
+            ax.fill_between(data['kblobs'], lo, hi, color='b', alpha=0.4)
+            lo, hi = np.percentile(ps, (16, 84), axis=0)
+            ax.fill_between(data['kblobs'], lo, hi, color='b', alpha=0.8)
+
+
+        if 'data' in data.keys():
+
+            # Use cmap to force match in colors
+            for i, z in enumerate(data['zfit']):
+                ydat, yerr = data['data'][i]
+                ax.errorbar(data['kblobs'], ydat, yerr.T,
+                    color=cmap.to_rgba(z), **marker_kw)
+
+        ax.set_xlabel(labels['k'])
+        ax.set_ylabel(labels['delta_sq'])
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_ylim(1, 1e3)
+
+        return ax
+
+    def plot_recon(self, par):
+        """
+        Plot constraints on model parameters vs. redshift.
+        """
+        pass
+
+    def plot_loglike(self, burn=0, ax=None, fig=1, **kwargs):
+        if ax is None:
+            fig, ax = pl.subplots(1, 1, num=fig)
+
+        burn_per_w = burn // self.data['blobs'].shape[1]
+        x = np.arange(self.data['chain'].shape[1])
+        for i in range(self.data['blobs'].shape[1]):
+            ax.plot(x, self.data['lnprob'][i,burn_per_w:], **kwargs)
+
+        ax.set_xlabel('step number')
+        ax.set_ylabel(r'$\log \mathcal{L}$')
+
+        return ax
 
 def read_mcmc():
     pass
@@ -342,9 +503,6 @@ def plot_igm_constraints(sampler, model, burn=0, bins=20):
     #ax_2d.annotate(r'$T_S = T_{\mathrm{ad}}(z=7.9)$', (0, Tgas_z8),
     #       ha='left', va='bottom', color='w', fontsize=16)
     #ax_Ts.plot([Tgas_z8]*2, [0, 0.5], color='k', ls='--')
-
-def plot_walker_trajectories(sampler, model):
-    pass
 
 def get_limits_on_params(sampler, model, percentile=(0.025, 0.975)):
 

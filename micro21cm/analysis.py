@@ -15,11 +15,17 @@ import numpy as np
 import matplotlib.pyplot as pl
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
+from .inference import tanh_generic, power_law
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
 _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
+_default_labels = {'Q': r'$Q$', 'R_b': r'$R_b$', 'Ts': r'$T_S$',
+    'sigma_b': r'$\sigma_b$'}
+_default_limits = {'Q': (-0.05, 1.05), 'R_b': (0, 15), 'Ts': (0, 150),
+    'sigma_b': (0, 1)}
+_default_z = np.arange(5, 20, 0.05)
 
 bbox = dict(facecolor='none', edgecolor='k', fc='w',
         boxstyle='round,pad=0.3', alpha=0.9, zorder=1000)
@@ -96,20 +102,22 @@ class AnalyzeFit(object):
             if _j == 0:
                 axes[_i][_j].set_ylabel(ylab)
 
+        return axes
 
-
-    def plot_ps(self, z=None, show_best=True, ax=None, fig=1, conflevel=0.68,
+    def plot_ps(self, z=None, use_best=True, ax=None, fig=1, conflevel=0.68,
         marker_kw={}, use_cbar=True, cmap='jet', **kwargs):
         """
-        Plot the power spectrum saved on each step of the chain.
+        Plot the power spectrum, either at the maximum likelihood point or
+        as a shaded region indicative of a given confidence level.
         """
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
 
-        norm = Normalize(vmin=min(self.data['zfit']),
-            vmax=max(self.data['zfit']))
-        cmap = ScalarMappable(norm=norm, cmap=cmap)
-        cmap.set_array([])
+        if use_cbar:
+            norm = Normalize(vmin=min(self.data['zfit']),
+                vmax=max(self.data['zfit']))
+            cmap = ScalarMappable(norm=norm, cmap=cmap)
+            cmap.set_array([])
 
         data = self.data
         ibest = np.argwhere(data['lnprob'] == data['lnprob'].max())[0]
@@ -124,15 +132,18 @@ class AnalyzeFit(object):
 
                 _z_ = self.data['zfit'][i]
 
-                if show_best:
+                if use_cbar:
+                    kwargs['color'] = color=cmap.to_rgba(_z_)
+
+                if use_best:
                     ax.plot(data['kblobs'], data['blobs'][ibest[1], ibest[0],i],
-                        color=cmap.to_rgba(_z_), **kwargs)
+                        **kwargs)
                 else:
                     _lo = (1. - conflevel) * 100 / 2.
                     _hi = 100 - _lo
                     lo, hi = np.percentile(ps, (_lo, _hi), axis=0)
                     ax.fill_between(data['kblobs'], lo, hi,
-                        color=cmap.to_rgba(_z_), **kwargs)
+                        **kwargs)
 
         else:
             ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2]))
@@ -143,28 +154,129 @@ class AnalyzeFit(object):
             lo, hi = np.percentile(ps, (16, 84), axis=0)
             ax.fill_between(data['kblobs'], lo, hi, color='b', alpha=0.8)
 
-
+        ##
+        # Overplot data
         if 'data' in data.keys():
 
             # Use cmap to force match in colors
             for i, z in enumerate(data['zfit']):
                 ydat, yerr = data['data'][i]
-                ax.errorbar(data['kblobs'], ydat, yerr.T,
-                    color=cmap.to_rgba(z), **marker_kw)
+
+                if use_cbar:
+                    marker_kw['color'] = cmap.to_rgba(z)
+
+                ax.errorbar(data['kblobs'], ydat, yerr.T, **marker_kw)
 
         ax.set_xlabel(labels['k'])
         ax.set_ylabel(labels['delta_sq'])
         ax.set_xscale('log')
         ax.set_yscale('log')
-        ax.set_ylim(1, 1e3)
+        ax.set_ylim(data['blobs'].min()*0.5, data['blobs'].max() * 2)
+
+        if use_cbar:
+            cax = fig.add_axes([0.91, 0.11, 0.015, 0.77])
+            cb = pl.colorbar(cmap, ax=ax, cax=cax, orientation='vertical')
+            cb.set_label(r'$z$')
+
 
         return ax
 
-    def plot_recon(self, par):
+    def get_par_from_increments(self):
+        pass
+
+    def plot_recon(self, par, use_best=False, conflevel=0.68, ax=None, fig=1,
+        burn=0, marker_kw={}, **kwargs):
         """
         Plot constraints on model parameters vs. redshift.
         """
-        pass
+        if ax is None:
+            fig, ax = pl.subplots(1, 1, num=fig)
+
+        params, redshifts = self.data['pinfo']
+
+        chain = self.data['chain']
+        burn_per_w = burn // self.data['chain'].shape[0]
+
+        # May be repeats -- just take first one
+        ibest = np.argwhere(self.data['lnprob'] == self.data['lnprob'].max())
+        if ibest.ndim == 2:
+            ibest = ibest[0]
+
+        # First, deal with parametric results if we have them.
+        for _par_ in ['Q', 'R_b']:
+            if (par != _par_):
+                continue
+
+            if (self.data['kwargs']['{}func'.format(_par_[0])] is None):
+                continue
+
+            p0 = params.index('{}_p0'.format(_par_[0]))
+            p1 = params.index('{}_p1'.format(_par_[0]))
+
+            v0 = chain[:,:,p0]
+            v1 = chain[:,:,p1]
+
+            fname = self.data['kwargs']['{}func'.format(_par_[0])]
+
+            if fname == 'tanh':
+                func = tanh_generic
+            elif fname == 'pl':
+                func = power_law
+            else:
+                raise NotImplemented('No option for {} yet'.format(fname))
+
+            # Make Q(z) for each MCMC sample
+            if use_best:
+                y = func(_default_z, v0[ibest[0],ibest[1]],
+                    v1[ibest[0],ibest[1]])
+                ax.plot(_default_z, y, **kwargs)
+            else:
+                v0_flat = self.data['flatchain'][burn:,p0]
+                v1_flat = self.data['flatchain'][burn:,p1]
+                y = np.zeros((v0_flat.size, _default_z.size))
+                for i, _z_ in enumerate(_default_z):
+                    y[:,i] = func(_z_, v0_flat, v1_flat)
+
+                _lo = (1. - conflevel) * 100 / 2.
+                _hi = 100 - _lo
+                lo, hi = np.percentile(y, (_lo, _hi), axis=0)
+
+                ax.fill_between(_default_z, lo, hi, **kwargs)
+
+            ax.set_xlabel(r'$z$')
+            ax.set_ylabel(_default_labels[_par_])
+            ax.set_xlim(5, 20)
+            ax.set_ylim(*_default_limits[_par_])
+
+            return ax
+
+        ##
+        # Non-parametric results
+        for i, _par_ in enumerate(params):
+
+            z = redshifts[i]
+
+            if (_par_ != par):
+                continue
+
+            #if (_par_ == 'R_b') and (self.data['kwargs']['Rxdelta'] is not None):
+            #    continue
+            #else:
+            best = chain[ibest[0], ibest[1],i]
+            _chain = self.data['flatchain'][burn:,i]
+
+            # Get band
+            _lo = (1. - conflevel) * 100 / 2.
+            _hi = 100 - _lo
+            lo, hi = np.percentile(_chain, (_lo, _hi), axis=0)
+            ax.plot([z]*2, [lo, hi], **kwargs)
+            ax.scatter([z]*2, [best]*2, **marker_kw)
+
+        ax.set_xlabel(r'$z$')
+        ax.set_ylabel(par)
+        ax.set_xlim(5, 20)
+
+        return ax
 
     def plot_loglike(self, burn=0, ax=None, fig=1, **kwargs):
         if ax is None:

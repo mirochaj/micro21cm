@@ -34,6 +34,7 @@ _priors = \
  'Q': (0, 1),
  'R_b': (0, 30),
  'sigma_b': (0.05, 1.0),
+ 'gamma_R': (-4, 4),
 }
 
 _guesses = \
@@ -42,6 +43,7 @@ _guesses = \
  'Q': (0.2, 0.8),
  'R_b': (0.5, 10.),
  'sigma_b': (0.2, 0.8),
+ 'gamma_R': (-1, 1),
 }
 
 _bins = \
@@ -351,6 +353,9 @@ class FitHelper(object):
 
                     lo = R0 - 0.5 * dR
                     hi = R0 + 0.5 * dR
+                elif par == 'sigma_b' \
+                    and self.kwargs['bubbles_pdf'][0:4] == 'plex':
+                    lo, hi = _guesses['gamma_R']
                 else:
                     lo, hi = _guesses[par]
 
@@ -562,7 +567,10 @@ class FitHelper(object):
             else:
                 # Can parameterize change in Q, R_b, rather than Q, R_b
                 # themselves.
-                lo, hi = _priors[par]
+                if par == 'sigma_b' and self.kwargs['bubbles_pdf'][0:4] == 'plex':
+                    lo, hi = _priors['gamma_R']
+                else:
+                    lo, hi = _priors[par]
 
             if par == 'Q':
                 Q.append(args[i])

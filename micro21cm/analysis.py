@@ -263,7 +263,7 @@ class AnalyzeFit(object):
 
     def plot_ps(self, z=None, use_best=True, ax=None, fig=1, conflevel=0.68,
         marker_kw={}, use_cbar=True, show_cbar=True, show_data=True, cmap='jet',
-        **kwargs):
+        burn=0, **kwargs):
         """
         Plot the power spectrum, either at the maximum likelihood point or
         as a shaded region indicative of a given confidence level.
@@ -277,6 +277,8 @@ class AnalyzeFit(object):
             cmap = ScalarMappable(norm=norm, cmap=cmap)
             cmap.set_array([])
 
+        burn_per_w = burn // self.data['chain'].shape[0]
+
         data = self.data
         ibest = np.argwhere(data['lnprob'] == data['lnprob'].max())[0]
         sh = data['blobs'].shape
@@ -286,18 +288,21 @@ class AnalyzeFit(object):
         for i in range(sh[2]):
             ps = _ps[:,i,:]
             _z_ = self.data['zfit'][i]
+
             if z is not None:
                 if z != _z_:
                     continue
+
             if use_cbar:
                 kwargs['color'] = cmap.to_rgba(_z_)
+
             if use_best:
                 ax.plot(data['kblobs'], data['blobs'][ibest[1], ibest[0],i],
                     **kwargs)
             else:
                 _lo = (1. - conflevel) * 100 / 2.
                 _hi = 100 - _lo
-                lo, hi = np.percentile(ps, (_lo, _hi), axis=0)
+                lo, hi = np.percentile(ps[burn:], (_lo, _hi), axis=0)
                 ax.fill_between(data['kblobs'], lo, hi,
                     **kwargs)
 
@@ -387,7 +392,7 @@ class AnalyzeFit(object):
                 v1_flat = self.data['flatchain'][burn:,p1]
                 y = np.zeros((v0_flat.size, _default_z.size))
                 for i, _z_ in enumerate(_default_z):
-                    y[:,i] = func(_z_, v0_flat, v1_flat)
+                    y[:,i] = func(_z_, [v0_flat, v1_flat])
 
                 _lo = (1. - conflevel) * 100 / 2.
                 _hi = 100 - _lo

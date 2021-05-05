@@ -18,6 +18,7 @@ import pickle
 import numpy as np
 from scipy.special import erf
 from .models import BubbleModel
+from scipy.integrate import quad
 
 try:
     from mpi4py import MPI
@@ -27,6 +28,12 @@ try:
 except ImportError:
     rank = 0
     size = 1
+
+m_H = 1.673532518188e-24
+G = 6.673e-8     				# Gravitational constant - [G] = cm^3/g/s^2
+km_per_mpc = 3.08568e19
+c = 29979245800.0 				# Speed of light - [c] = cm/s
+sigma_T = 6.65e-25			    # Thomson cross section [sigma_T] = cm^2
 
 _priors = \
 {
@@ -65,8 +72,8 @@ fit_kwargs = \
  'fit_z': 5, # If None, fits all redshifts!
  'Qprior': True,
  'Rprior': True,
- 'tau_prior': False,
- 'gpt_prior': False,
+ 'prior_tau': False,
+ 'prior_GP': False,
  'Qxdelta': True, # Otherwise, vary *increments* in Q.
  'Rxdelta': True, # Otherwise, vary *increments* in Q.
  'Qfunc': None,
@@ -93,15 +100,17 @@ fit_kwargs = \
 Q_stagger = lambda z: 1. - min(1, max(0, (z - 5.) / 5.))
 R_stagger = lambda z: ((z - 5.) / 5.)**-2
 
-def tanh_generic(z, zref, dz):
-    return 0.5 * (np.tanh((zref - z) / dz) + 1.)
+_normal = lambda x, p0, p1, p2: p0 * np.exp(-(x - p1)**2 / 2. / p2**2)
 
-def power_law(z, norm, gamma):
-    return norm * ((1 + z) / 8.)**gamma
+def tanh_generic(z, pars):
+    return 0.5 * (np.tanh((pars[0] - z) / pars[1]) + 1.)
+
+def power_law(z, pars):
+    return pars[0] * ((1 + z) / 8.)**pars[1]
 
 
 class FitHelper(object):
-    def __init__(self, data, data_err_func, **kwargs):
+    def __init__(self, data=None, data_err_func=None, **kwargs):
         self.data = data
         self.data_err_func = data_err_func
         self.kwargs = fit_kwargs.copy()
@@ -246,6 +255,11 @@ class FitHelper(object):
                 if kwargs['Rprior']:
                     s_prior += 'Rinc'
 
+            if kwargs['prior_tau']:
+                prefix += '_ptau'
+            if kwargs['prior_GP']:
+                prefix += '_pGP'
+
             prefix += '_mock_21cmfast_{}'.format(kwargs['mocknum'])
 
             if kwargs['fit_z'] is None:
@@ -275,13 +289,43 @@ class FitHelper(object):
 
         return self._prefix
 
+    def get_tau(self, pars):
+        Qofz = self.func_Q
+
+        Y = self.model.cosmo.get_Y_p()
+        y = 1. / (1. / Y - 1.) / 4.
+        omega_m_0 = self.model.cosmo.omegam
+        omega_b_0 = self.model.cosmo.omegab
+        omega_l_0 = 1. - omega_m_0
+        H0 = self.model.cosmo.H0 / km_per_mpc
+        rho_crit = (3.0 * H0**2) / (8.0 * np.pi * G)
+        rho_m_z0 = omega_m_0 * rho_crit
+        rho_b_z0 = (omega_b_0 / omega_m_0) * rho_m_z0
+
+        nH = lambda z: (1. - Y) * rho_b_z0 * (1. + z)**3 / m_H
+
+        Hofz = lambda z: H0 * np.sqrt(omega_m_0 * (1.0 + z)**3  + omega_l_0)
+        dldz = lambda z: c / Hofz(z) / (1. + z)
+
+        ne = lambda z: nH(z) * Qofz(z, pars) * (1. + y)
+
+        integrand_H_HeI = lambda z: ne(z) *  dldz(z) * sigma_T \
+
+        # Assume helium reionization is complete at z=3
+        integrand_HeII = lambda z: dldz(z) * sigma_T * nH(z) * y
+
+        tau = quad(integrand_H_HeI, 0., 30)[0] \
+            + quad(integrand_HeII, 0., 3)[0]
+
+        return tau
+
     @property
     def func_Q(self):
         if not hasattr(self, '_func_Q'):
             if self.kwargs['Qfunc'] is None:
                 self._func_Q = None
             elif self.kwargs['Qfunc'] == 'tanh':
-                self._func_Q = lambda z, zref, dz: tanh_generic(z, zref, dz)
+                self._func_Q = lambda z, pars: tanh_generic(z, pars)
             else:
                 raise NotImplemented('help')
 
@@ -293,7 +337,7 @@ class FitHelper(object):
             if self.kwargs['Rfunc'] is None:
                 self._func_R = None
             elif self.kwargs['Rfunc'] == 'pl':
-                self._func_R = lambda z, norm, index: power_law(z, norm, index)
+                self._func_R = lambda z, pars: power_law(z, pars)
             else:
                 raise NotImplemented('help')
 
@@ -315,14 +359,14 @@ class FitHelper(object):
 
     @property
     def pinfo(self):
-        return self.get_param_info(self.model)
+        return self.get_param_info()
 
-    def get_initial_walker_pos(self, model):
+    def get_initial_walker_pos(self):
         nwalkers = self.kwargs['nwalkers']
 
         pos = np.zeros((nwalkers, self.nparams))
 
-        params, redshifts = self.get_param_info(self.model)
+        params, redshifts = self.get_param_info()
 
         for i, par in enumerate(params):
 
@@ -365,12 +409,12 @@ class FitHelper(object):
 
         return pos
 
-    def get_param_info(self, model):
+    def get_param_info(self):
         """
         Figure out mapping from parameter list to parameter names and redshifts.
         """
 
-        par_per_z = len(model.params)
+        par_per_z = len(self.model.params)
         if self.func_Q is not None:
             par_per_z -= 1
         if self.func_R is not None:
@@ -382,7 +426,7 @@ class FitHelper(object):
         for i, iz in enumerate(self.fit_zindex):
             _z_ = self.get_z_from_index(iz)
 
-            for j, par in enumerate(model.params):
+            for j, par in enumerate(self.model.params):
 
                 if (par == 'Q') and (self.func_Q is not None):
                     continue
@@ -498,7 +542,7 @@ class FitHelper(object):
 
         print("% Wrote {} at {}.".format(fn, time.ctime()))
 
-    def get_param_dict(self, model, z, args, ztol=1e-3):
+    def get_param_dict(self, z, args, ztol=1e-3):
         """
         Take complete list of parameters from emcee and make dictionary
         of parameters for a single redshift.
@@ -507,20 +551,18 @@ class FitHelper(object):
             automatically.
 
         """
+        model = self.model
 
-        allpars, redshifts = self.get_param_info(model)
-
-
-
+        allpars, redshifts = self.get_param_info()
 
         pars = {}
         for i, par in enumerate(model.params):
 
             # Check for parametric options
             if (par == 'Q') and (self.func_Q is not None):
-                pars['Q'] = self.func_Q(z, args[-4], args[-3])
+                pars['Q'] = self.func_Q(z, args[-4:-2])
             elif (par == 'R_b') and (self.func_R is not None):
-                pars['R_b'] = self.func_R(z, args[-2], args[-1])
+                pars['R_b'] = self.func_R(z, args[-2:])
             else:
 
                 pok = np.zeros(len(allpars))
@@ -550,19 +592,24 @@ class FitHelper(object):
 
         return pars
 
-    def get_prior(self, model, args):
+    def get_prior(self, args):
 
-        params, redshifts = self.get_param_info(model)
+        model = self.model
+        params, redshifts = self.get_param_info()
 
         Q = []
         R = []
+        Qpars = []
+        Rpars = []
         for i, par in enumerate(params):
             if np.isinf(redshifts[i]):
                 if par.startswith('Q'):
                     post = par[2:]
+                    Qpars.append(par)
                     lo, hi = _priors_Q_tanh[post]
                 elif par.startswith('R'):
                     post = par[2:]
+                    Rpars.append(par)
                     lo, hi = _priors_R_pl[post]
                 else:
                     raise NotImplemented('help')
@@ -590,6 +637,20 @@ class FitHelper(object):
             if not np.all(np.diff(R) < 0):
                 return -np.inf
 
+        ##
+        # Check for priors on tau, Q(z)
+        if self.kwargs['prior_GP'] not in [None, False, 0]:
+            # Assume Gaussian
+            _pars = [args[params.index(element)] for element in Qpars]
+            if self.func_Q(5.9, _pars) < 0.9:
+                return -np.inf
+
+        lnP = 0.
+        if self.kwargs['prior_tau'] not in [None, False, 0]:
+            # Assume Gaussian
+            _pars = [args[params.index(element)] for element in Qpars]
+            tau = self.get_tau(_pars)
+            lnP -= np.log(_normal(tau, 1., 0.055, 0.009))
 
         # If we made it this far, everything is OK
-        return 0.
+        return lnP

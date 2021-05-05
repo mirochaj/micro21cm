@@ -65,6 +65,8 @@ fit_kwargs = \
  'fit_z': 5, # If None, fits all redshifts!
  'Qprior': True,
  'Rprior': True,
+ 'tau_prior': False,
+ 'gpt_prior': False,
  'Qxdelta': True, # Otherwise, vary *increments* in Q.
  'Rxdelta': True, # Otherwise, vary *increments* in Q.
  'Qfunc': None,
@@ -561,7 +563,7 @@ class FitHelper(object):
                     lo, hi = _priors_Q_tanh[post]
                 elif par.startswith('R'):
                     post = par[2:]
-                    lo, hi = _guesses_R_pl[post]
+                    lo, hi = _priors_R_pl[post]
                 else:
                     raise NotImplemented('help')
             else:

@@ -34,6 +34,7 @@ G = 6.673e-8     				# Gravitational constant - [G] = cm^3/g/s^2
 km_per_mpc = 3.08568e19
 c = 29979245800.0 				# Speed of light - [c] = cm/s
 sigma_T = 6.65e-25			    # Thomson cross section [sigma_T] = cm^2
+max_Q = 0.999999
 
 _priors = \
 {
@@ -62,10 +63,19 @@ _bins = \
 }
 
 _guesses_Q_tanh = {'p0': (6, 10), 'p1': (1, 4)}
+_guesses_Q_bpl = {'p0': (0.25, 0.75), 'p1': (6, 10), 'p2': (-3, -1),
+    'p3': (-4, -2)}
 _guesses_R_pl = {'p0': (1., 5.), 'p1': (-2., -1.)}
 
+_guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl}
+
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
+_priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
+
 _priors_R_pl = {'p0': (0, 30), 'p1': (-4, 0.)}
+
+
+_priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl}
 
 fit_kwargs = \
 {
@@ -108,6 +118,29 @@ def tanh_generic(z, pars):
 def power_law(z, pars):
     return pars[0] * ((1 + z) / 8.)**pars[1]
 
+def power_law_max1(z, pars):
+    return np.minimum(max_Q, power_law(z, pars))
+
+def broken_power_law(z, pars):
+    A, zb, alpha1, alpha2 = pars
+    if type(z) == np.ndarray:
+        lo = z <= zb
+        hi = z > zb
+
+        bpl = np.zeros_like(z)
+        bpl[lo==1] = A * (z[lo==1] / zb)**alpha1
+        bpl[hi==1] = A * (z[hi==1] / zb)**alpha2
+
+    else:
+        if z <= zb:
+            bpl = A * (z / zb)**alpha1
+        else:
+            bpl = A * (z / zb)**alpha2
+
+    return bpl
+
+def broken_power_law_max1(z, pars):
+    return np.minimum(max_Q, broken_power_law(z, pars))
 
 class FitHelper(object):
     def __init__(self, data=None, data_err_func=None, **kwargs):
@@ -326,6 +359,10 @@ class FitHelper(object):
                 self._func_Q = None
             elif self.kwargs['Qfunc'] == 'tanh':
                 self._func_Q = lambda z, pars: tanh_generic(z, pars)
+            elif self.kwargs['Qfunc'] == 'pl':
+                self._func_Q = lambda z, pars: power_law_max1(z, pars)
+            elif self.kwargs['Qfunc'] == 'bpl':
+                self._func_Q = lambda z, pars: broken_power_law_max1(z, pars)
             else:
                 raise NotImplemented('help')
 
@@ -354,7 +391,15 @@ class FitHelper(object):
     def nparams(self):
 
         N = (len(self.model.params) - self.num_parametric) * self.fit_zindex.size
-        N += self.num_parametric * 2
+
+        if self.kwargs['Qfunc'] in ['pl', 'tanh']:
+            N += 2
+        elif self.kwargs['Qfunc'] == 'bpl':
+            N += 4
+
+        if self.kwargs['Rfunc'] in ['pl']:
+            N += 2
+
         return N
 
     @property
@@ -374,7 +419,7 @@ class FitHelper(object):
             if np.isinf(redshifts[i]):
                 if par.startswith('Q'):
                     post = par[2:]
-                    lo, hi = _guesses_Q_tanh[post]
+                    lo, hi = _guesses_Q[self.kwargs['Qfunc']][post]
                 elif par.startswith('R'):
                     post = par[2:]
                     lo, hi = _guesses_R_pl[post]
@@ -439,8 +484,15 @@ class FitHelper(object):
 
         # If parameterizing Q or R, these will be at the end.
         if self.func_Q is not None:
-            param_z.extend([-np.inf]*2)
-            param_names.extend(['Q_p0', 'Q_p1'])
+            if self.kwargs['Qfunc'] in ['tanh', 'pl']:
+                param_z.extend([-np.inf]*2)
+                param_names.extend(['Q_p0', 'Q_p1'])
+            elif self.kwargs['Qfunc'] == 'bpl':
+                param_z.extend([-np.inf]*4)
+                param_names.extend(['Q_p0', 'Q_p1', 'Q_p2', 'Q_p3'])
+            else:
+                raise NotImplemented('help')
+
         if self.func_R is not None:
             param_z.extend([-np.inf]*2)
             param_names.extend(['R_p0', 'R_p1'])
@@ -560,7 +612,14 @@ class FitHelper(object):
 
             # Check for parametric options
             if (par == 'Q') and (self.func_Q is not None):
-                pars['Q'] = self.func_Q(z, args[-4:-2])
+                _args = []
+                for j, _par_ in enumerate(allpars):
+                    if not _par_.startswith('Q'):
+                        continue
+
+                    _args.append(args[j])
+
+                pars['Q'] = self.func_Q(z, _args)
             elif (par == 'R_b') and (self.func_R is not None):
                 pars['R_b'] = self.func_R(z, args[-2:])
             else:
@@ -606,7 +665,8 @@ class FitHelper(object):
                 if par.startswith('Q'):
                     post = par[2:]
                     Qpars.append(par)
-                    lo, hi = _priors_Q_tanh[post]
+                    lo, hi = _priors_Q[self.kwargs['Qfunc']][post]
+
                 elif par.startswith('R'):
                     post = par[2:]
                     Rpars.append(par)

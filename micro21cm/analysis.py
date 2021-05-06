@@ -328,7 +328,11 @@ class AnalyzeFit(object):
         ax.set_ylabel(labels['delta_sq'])
         ax.set_xscale('log')
         ax.set_yscale('log')
-        ax.set_ylim(data['blobs'].min()*0.5, data['blobs'].max() * 2)
+
+        try:
+            ax.set_ylim(data['blobs'].min()*0.5, data['blobs'].max() * 2)
+        except:
+            ax.set_ylim(1, 1e4)
 
         if use_cbar and show_cbar:
             cax = fig.add_axes([0.91, 0.11, 0.015, 0.77])
@@ -384,8 +388,8 @@ class AnalyzeFit(object):
 
             # Make Q(z) for each MCMC sample
             if use_best:
-                y = func(_default_z, v0[ibest[0],ibest[1]],
-                    v1[ibest[0],ibest[1]])
+                p = v0[ibest[0],ibest[1]], v1[ibest[0],ibest[1]]
+                y = func(_default_z, p)
                 ax.plot(_default_z, y, **kwargs)
             else:
                 v0_flat = self.data['flatchain'][burn:,p0]

@@ -15,7 +15,8 @@ import numpy as np
 import matplotlib.pyplot as pl
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
-from .inference import tanh_generic, power_law
+from .inference import tanh_generic, power_law, power_law_max1, \
+    broken_power_law, broken_power_law_max1
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
@@ -382,7 +383,15 @@ class AnalyzeFit(object):
             if fname == 'tanh':
                 func = tanh_generic
             elif fname == 'pl':
-                func = power_law
+                if _par_ == 'Q':
+                    func = power_law_max1
+                else:
+                    func = power_law
+            elif fname == 'bpl':
+                if _par_ == 'Q':
+                    func = broken_power_law_max1
+                else:
+                    func = broken_power_law
             else:
                 raise NotImplemented('No option for {} yet'.format(fname))
 

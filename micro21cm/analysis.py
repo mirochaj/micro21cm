@@ -16,7 +16,7 @@ import matplotlib.pyplot as pl
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
 from .inference import tanh_generic, power_law, power_law_max1, \
-    broken_power_law, broken_power_law_max1
+    broken_power_law, broken_power_law_max1, extract_params
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
@@ -30,6 +30,7 @@ _default_z = np.arange(5, 20, 0.05)
 
 bbox = dict(facecolor='none', edgecolor='k', fc='w',
         boxstyle='round,pad=0.3', alpha=0.9, zorder=1000)
+
 
 class AnalyzeFit(object):
     def __init__(self, fn):
@@ -372,11 +373,16 @@ class AnalyzeFit(object):
             if (self.data['kwargs']['{}func'.format(_par_[0])] is None):
                 continue
 
-            p0 = params.index('{}_p0'.format(_par_[0]))
-            p1 = params.index('{}_p1'.format(_par_[0]))
+            j = 0
+            p = []
+            v = []
+            while '{}_p{}'.format(_par_[0], j) in params:
+                pj = params.index('{}_p{}'.format(_par_[0], j))
+                vj = chain[:,:,pj]
+                j += 1
 
-            v0 = chain[:,:,p0]
-            v1 = chain[:,:,p1]
+                p.append(pj)
+                v.append(vj)
 
             fname = self.data['kwargs']['{}func'.format(_par_[0])]
 
@@ -397,15 +403,16 @@ class AnalyzeFit(object):
 
             # Make Q(z) for each MCMC sample
             if use_best:
-                p = v0[ibest[0],ibest[1]], v1[ibest[0],ibest[1]]
-                y = func(_default_z, p)
+                pb = [element[ibest[0],ibest[1]] for element in v]
+                y = func(_default_z, pb)
                 ax.plot(_default_z, y, **kwargs)
             else:
-                v0_flat = self.data['flatchain'][burn:,p0]
-                v1_flat = self.data['flatchain'][burn:,p1]
-                y = np.zeros((v0_flat.size, _default_z.size))
+                v_flat = [self.data['flatchain'][burn:,_p] for _p in p]
+                _pars_ = np.array([element for element in v_flat])
+
+                y = np.zeros((v[0].size, _default_z.size))
                 for i, _z_ in enumerate(_default_z):
-                    y[:,i] = func(_z_, [v0_flat, v1_flat])
+                    y[:,i] = func(_z_, _pars_)
 
                 _lo = (1. - conflevel) * 100 / 2.
                 _hi = 100 - _lo

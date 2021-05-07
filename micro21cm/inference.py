@@ -123,6 +123,7 @@ def power_law_max1(z, pars):
 
 def broken_power_law(z, pars):
     A, zb, alpha1, alpha2 = pars
+
     if type(z) == np.ndarray:
         lo = z <= zb
         hi = z > zb
@@ -130,6 +131,15 @@ def broken_power_law(z, pars):
         bpl = np.zeros_like(z)
         bpl[lo==1] = A * (z[lo==1] / zb)**alpha1
         bpl[hi==1] = A * (z[hi==1] / zb)**alpha2
+
+    # Special case is if `pars` contains array of MCMC samples
+    elif type(pars[0]) == np.ndarray:
+        lo = z <= zb
+        hi = z > zb
+
+        bpl = np.zeros(pars.shape[-1])
+        bpl[lo==1] = A[lo==1] * (z / zb[lo==1])**alpha1[lo==1]
+        bpl[hi==1] = A[hi==1] * (z / zb[hi==1])**alpha2[hi==1]
 
     else:
         if z <= zb:
@@ -141,6 +151,17 @@ def broken_power_law(z, pars):
 
 def broken_power_law_max1(z, pars):
     return np.minimum(max_Q, broken_power_law(z, pars))
+
+def extract_params(all_pars, all_args, par):
+    _args = []
+    for j, _par_ in enumerate(all_pars):
+        if not _par_.startswith(par):
+            continue
+
+        _args.append(all_args[j])
+
+    return args
+
 
 class FitHelper(object):
     def __init__(self, data=None, data_err_func=None, **kwargs):
@@ -612,13 +633,7 @@ class FitHelper(object):
 
             # Check for parametric options
             if (par == 'Q') and (self.func_Q is not None):
-                _args = []
-                for j, _par_ in enumerate(allpars):
-                    if not _par_.startswith('Q'):
-                        continue
-
-                    _args.append(args[j])
-
+                _args = extract_params(allpars, args, 'Q')
                 pars['Q'] = self.func_Q(z, _args)
             elif (par == 'R_b') and (self.func_R is not None):
                 pars['R_b'] = self.func_R(z, args[-2:])

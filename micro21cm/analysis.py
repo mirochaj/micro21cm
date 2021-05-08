@@ -205,16 +205,20 @@ class AnalyzeFit(object):
 
         params, redshifts = self.data['pinfo']
 
-        ncols = self.data['zfit'].size
         nrows = ('Ts' in params) + ('sigma_b' in params) \
             + ('Q' in params) + ('R_b' in params) \
             + ('Q_p0' in params) + ('R_p0' in params)
+
+        ncols = max(self.data['zfit'].size,
+            sum([par.startswith('Q') for par in params]))
 
         if ax is None:
             fig, axes = pl.subplots(nrows, ncols, num=fig,
                 figsize=(ncols * 4, nrows *4))
 
         steps = np.arange(0, self.data['chain'].shape[1])
+
+        ibest = np.argwhere(self.data['lnprob'] == self.data['lnprob'].max())[-1]
 
         # This looks slow/lazy but it's to keep ordering.
         punique = []
@@ -257,6 +261,15 @@ class AnalyzeFit(object):
             chain = self.data['chain'][:,burn:,i]
 
             axes[_i][_j].plot(steps, chain.T, **kwargs)
+
+            # Plot best one as horizontal line
+            axes[_i][_j].plot(steps,
+                chain[ibest[0],ibest[1]] * np.ones_like(steps), color='k',
+                ls='--', zorder=10, lw=3)
+
+            # Put marker at walker/step where best happens
+            axes[_i][_j].scatter(steps[ibest[1]], chain[ibest[0],ibest[1]],
+                marker='|', s=150, color='k', zorder=10)
 
             if _j == 0:
                 axes[_i][_j].set_ylabel(ylab)
@@ -410,7 +423,7 @@ class AnalyzeFit(object):
                 v_flat = [self.data['flatchain'][burn:,_p] for _p in p]
                 _pars_ = np.array([element for element in v_flat])
 
-                y = np.zeros((v[0].size, _default_z.size))
+                y = np.zeros((v[0].size-burn, _default_z.size))
                 for i, _z_ in enumerate(_default_z):
                     y[:,i] = func(_z_, _pars_)
 

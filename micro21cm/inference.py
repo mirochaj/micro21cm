@@ -65,14 +65,14 @@ _bins = \
 _guesses_Q_tanh = {'p0': (6, 10), 'p1': (1, 4)}
 _guesses_Q_bpl = {'p0': (0.25, 0.75), 'p1': (6, 10), 'p2': (-3, -1),
     'p3': (-4, -2)}
-_guesses_R_pl = {'p0': (1., 5.), 'p1': (-2., -1.)}
+_guesses_R_pl = {'p0': (1., 5.), 'p1': (-9., -11.)}
 
 _guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl}
 
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
 _priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
 
-_priors_R_pl = {'p0': (0, 30), 'p1': (-4, 0.)}
+_priors_R_pl = {'p0': (0, 30), 'p1': (-15, 0.)}
 
 
 _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl}
@@ -160,7 +160,7 @@ def extract_params(all_pars, all_args, par):
 
         _args.append(all_args[j])
 
-    return args
+    return _args
 
 
 class FitHelper(object):

@@ -361,7 +361,7 @@ class AnalyzeFit(object):
         pass
 
     def plot_recon(self, par, use_best=False, conflevel=0.68, ax=None, fig=1,
-        burn=0, marker_kw={}, **kwargs):
+        burn=0, marker_kw={}, scatter=False, **kwargs):
         """
         Plot constraints on model parameters vs. redshift.
         """
@@ -414,24 +414,42 @@ class AnalyzeFit(object):
             else:
                 raise NotImplemented('No option for {} yet'.format(fname))
 
+            pbest = [element[ibest[0],ibest[1]] for element in v]
+
+
             # Make Q(z) for each MCMC sample
             if use_best:
-                pb = [element[ibest[0],ibest[1]] for element in v]
-                y = func(_default_z, pb)
-                ax.plot(_default_z, y, **kwargs)
+                ybest = func(_default_z, pbest)
+                ax.plot(_default_z, ybest, **kwargs)
             else:
                 v_flat = [self.data['flatchain'][burn:,_p] for _p in p]
                 _pars_ = np.array([element for element in v_flat])
 
+                if scatter:
+                    zplot = self.data['zfit']
+                else:
+                    zplot = _default_z
+
+                ybest = func(zplot, pbest)
+
                 y = np.zeros((v[0].size-burn, _default_z.size))
-                for i, _z_ in enumerate(_default_z):
+                for i, _z_ in enumerate(zplot):
                     y[:,i] = func(_z_, _pars_)
 
                 _lo = (1. - conflevel) * 100 / 2.
                 _hi = 100 - _lo
                 lo, hi = np.percentile(y, (_lo, _hi), axis=0)
 
-                ax.fill_between(_default_z, lo, hi, **kwargs)
+                if scatter:
+                    kw = kwargs.copy()
+                    for i, _z_ in enumerate(zplot):
+                        ax.plot([_z_]*2, [lo[i], hi[i]], **kw)
+                        ax.scatter([_z_]*2, [ybest[i]]*2, **marker_kw)
+
+                        if 'label' in kw:
+                            del kw['label']
+                else:
+                    ax.fill_between(zplot, lo, hi, **kwargs)
 
             ax.set_xlabel(r'$z$')
             ax.set_ylabel(_default_labels[_par_])

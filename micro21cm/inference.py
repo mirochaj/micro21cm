@@ -311,8 +311,11 @@ class FitHelper(object):
 
             if kwargs['prior_tau']:
                 prefix += '_ptau'
-            if kwargs['prior_GP']:
-                prefix += '_pGP'
+
+
+            if type(kwargs['prior_GP']) in [list, tuple, np.ndarray]:
+                zp, Qp = kwargs['prior_GP']
+                prefix += '_pGP_z{:.1f}_Q{:.2f}'.format(zp, Qp)
 
             prefix += '_mock_21cmfast_{}'.format(kwargs['mocknum'])
 
@@ -714,10 +717,10 @@ class FitHelper(object):
 
         ##
         # Check for priors on tau, Q(z)
-        if self.kwargs['prior_GP'] not in [None, False, 0]:
-            # Assume Gaussian
+        if type(self.kwargs['prior_GP']) in [list, tuple, np.ndarray]:
+            zp, Qp = self.kwargs['prior_GP']
             _pars = [args[params.index(element)] for element in Qpars]
-            if self.func_Q(5.9, _pars) < 0.9:
+            if self.func_Q(zp, _pars) < Qp:
                 return -np.inf
 
         lnP = 0.

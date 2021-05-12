@@ -84,8 +84,8 @@ fit_kwargs = \
  'Rprior': True,
  'prior_tau': False,
  'prior_GP': False,
- 'Qxdelta': True, # Otherwise, vary *increments* in Q.
- 'Rxdelta': True, # Otherwise, vary *increments* in Q.
+ 'Qxdelta': False, # Otherwise, vary *increments* in Q.
+ 'Rxdelta': False, # Otherwise, vary *increments* in Q.
  'Qfunc': None,
  'Rfunc': None,
 
@@ -456,16 +456,19 @@ class FitHelper(object):
                 if (par == 'Q') and self.kwargs['Qxdelta']:
                     lo, hi = 0, 0.2
                 elif par == 'Q':
-                    Q0 = Q_stagger(redshifts[i])
-                    dQ = 1. / float(len(self.fit_zindex) - 1)
+                    if self.fit_z.size == 1:
+                        lo, hi = 0, 1
+                    else:
+                        Q0 = Q_stagger(redshifts[i])
+                        dQ = 1. / float(max(len(self.fit_zindex) - 1, 1))
 
-                    lo = Q0 - 0.5 * dQ
-                    hi = Q0 + 0.5 * dQ
+                        lo = Q0 - 0.5 * dQ
+                        hi = Q0 + 0.5 * dQ
                 elif (par == 'R_b') and self.kwargs['Rxdelta']:
                     lo, hi = 0, 2
                 elif par == 'R_b':
                     R0 = R_stagger(redshifts[i])
-                    dR = 1. / float(len(self.fit_zindex) - 1)
+                    dR = 1. / float(max(len(self.fit_zindex) - 1, 1))
 
                     lo = R0 - 0.5 * dR
                     hi = R0 + 0.5 * dR

@@ -79,7 +79,7 @@ _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl}
 
 fit_kwargs = \
 {
- 'fit_z': 5, # If None, fits all redshifts!
+ 'fit_z': 0, # If None, fits all redshifts!
  'Qprior': True,
  'Rprior': True,
  'prior_tau': False,
@@ -92,6 +92,7 @@ fit_kwargs = \
  'kmin': 0.1,
  'kmax': 1,
  'kthin': None,
+ 'invert_logL': False,
 
  'bubbles_ion': 'ion',      # or 'hot' or False
  'bubbles_pdf': 'lognormal',
@@ -187,11 +188,14 @@ class FitHelper(object):
                 _data = self.data['power'][self.get_zindex_in_data(_z_)]
 
                 # Should apply window function here
-                _noise, _a21 = self.data_err_func(_z_, self.tab_k)
-
-                ydat = _data['Deltasq21'][self.k_mask==0]
-                perr = _data['errDeltasq21'][self.k_mask==0]
-                yerr = _noise + _a21 * ydat + perr
+                if self.data_err_func is not None:
+                    _noise, _a21 = self.data_err_func(_z_, self.tab_k)
+                    ydat = _data['Deltasq21'][self.k_mask==0]
+                    perr = _data['errDeltasq21'][self.k_mask==0]
+                    yerr = _noise + _a21 * ydat + perr
+                else:
+                    ydat = _data['Deltasq21']
+                    yerr = _data['errDeltasq21']
 
                 data_to_fit.append([ydat, yerr])
 
@@ -312,12 +316,9 @@ class FitHelper(object):
             if kwargs['prior_tau']:
                 prefix += '_ptau'
 
-
             if type(kwargs['prior_GP']) in [list, tuple, np.ndarray]:
                 zp, Qp = kwargs['prior_GP']
                 prefix += '_pGP_z{:.1f}_Q{:.2f}'.format(zp, Qp)
-
-            prefix += '_mock_21cmfast_{}'.format(kwargs['mocknum'])
 
             if kwargs['fit_z'] is None:
                 prefix += '_zall'

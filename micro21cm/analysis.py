@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as pl
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
+from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, extract_params
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
@@ -27,6 +28,7 @@ _default_labels = {'Q': r'$Q$', 'R_b': r'$R_b$', 'Ts': r'$T_S$',
 _default_limits = {'Q': (-0.05, 1.05), 'R_b': (0, 15), 'Ts': (0, 150),
     'sigma_b': (0, 1)}
 _default_z = np.arange(5, 20, 0.05)
+
 
 bbox = dict(facecolor='none', edgecolor='k', fc='w',
         boxstyle='round,pad=0.3', alpha=0.9, zorder=1000)
@@ -216,6 +218,9 @@ class AnalyzeFit(object):
             fig, axes = pl.subplots(nrows, ncols, num=fig,
                 figsize=(ncols * 4, nrows *4))
 
+            if ncols == 1:
+                axes = [[ax] for ax in axes]
+
         steps = np.arange(0, self.data['chain'].shape[1])
 
         ibest = np.argwhere(self.data['lnprob'] == self.data['lnprob'].max())[-1]
@@ -321,7 +326,6 @@ class AnalyzeFit(object):
                 ax.fill_between(data['kblobs'], lo, hi,
                     **kwargs)
 
-
         ##
         # Overplot data
         if ('data' in data.keys()) and show_data:
@@ -360,8 +364,59 @@ class AnalyzeFit(object):
     def get_par_from_increments(self):
         pass
 
-    def plot_recon(self, par, use_best=False, conflevel=0.68, ax=None, fig=1,
-        burn=0, marker_kw={}, scatter=False, **kwargs):
+    def plot_igm_constraints(self, z=None, use_best=False, conflevel=0.68,
+        ax=None, fig=1, burn=0, marker_kw={}, scatter=False, zoffset=0,
+        bins=20, smooth_hist=None, **kwargs):
+        """
+        Plot contours in Q-T_S space. Kind of the whole point of this package.
+        """
+
+        new_ax = False
+        if ax is None:
+            fig, ax = pl.subplots(1, 1, num=fig)
+            new_ax = True
+
+
+
+        params, redshifts = self.data['pinfo']
+
+        for _z_ in self.data['zfit']:
+
+            iT = None
+            iQ = None
+            for j, par in enumerate(params):
+
+
+                if (z is not None) and (_z_ != z):
+                    continue
+
+                if (par == 'Ts'):
+                    iT = j
+                if (par == 'Q'):
+                    iQ = j
+
+            T = self.data['flatchain'][burn:,iT]
+            Q = self.data['flatchain'][burn:,iQ]
+            x = 1. - Q
+
+            hist, be1, be2 = np.histogram2d(T, x, bins)
+            bc1 = bin_e2c(be1)
+            bc2 = bin_e2c(be2)
+
+            if smooth_hist is not None:
+                hist = gaussian_filter(hist, smooth_hist)
+
+            nu, levels = get_error_2d(T, x, hist, [bc1, bc2], nu=conflevel)
+            ax.contour(bc2, bc1, hist / hist.max(), levels, **kwargs)
+
+        if new_ax:
+            ax.set_xlabel(r'$x_{\mathrm{HI}} \equiv 1 - Q$')
+            ax.set_ylabel(r'$T_S \ [\mathrm{K}]$')
+
+        return ax
+
+    def plot_zevol(self, par, use_best=False, conflevel=0.68, ax=None, fig=1,
+        burn=0, marker_kw={}, scatter=False, zoffset=0, **kwargs):
         """
         Plot constraints on model parameters vs. redshift.
         """
@@ -443,8 +498,8 @@ class AnalyzeFit(object):
                 if scatter:
                     kw = kwargs.copy()
                     for i, _z_ in enumerate(zplot):
-                        ax.plot([_z_]*2, [lo[i], hi[i]], **kw)
-                        ax.scatter([_z_]*2, [ybest[i]]*2, **marker_kw)
+                        ax.plot([_z_+zoffset]*2, [lo[i], hi[i]], **kw)
+                        ax.scatter([_z_+zoffset]*2, [ybest[i]]*2, **marker_kw)
 
                         if 'label' in kw:
                             del kw['label']
@@ -477,8 +532,8 @@ class AnalyzeFit(object):
             _lo = (1. - conflevel) * 100 / 2.
             _hi = 100 - _lo
             lo, hi = np.percentile(_chain, (_lo, _hi), axis=0)
-            ax.plot([z]*2, [lo, hi], **kwargs)
-            ax.scatter([z]*2, [best]*2, **marker_kw)
+            ax.plot([z+zoffset]*2, [lo, hi], **kwargs)
+            ax.scatter([z+zoffset]*2, [best]*2, **marker_kw)
 
         ax.set_xlabel(r'$z$')
         ax.set_ylabel(_default_labels[par])

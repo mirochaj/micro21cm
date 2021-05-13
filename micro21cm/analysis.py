@@ -438,7 +438,7 @@ class AnalyzeFit(object):
             if (par != _par_):
                 continue
 
-            if (self.data['kwargs']['{}func'.format(_par_[0])] is None):
+            if (self.data['kwargs']['{}_func'.format(_par_[0])] is None):
                 continue
 
             j = 0
@@ -452,7 +452,7 @@ class AnalyzeFit(object):
                 p.append(pj)
                 v.append(vj)
 
-            fname = self.data['kwargs']['{}func'.format(_par_[0])]
+            fname = self.data['kwargs']['{}_func'.format(_par_[0])]
 
             if fname == 'tanh':
                 func = tanh_generic

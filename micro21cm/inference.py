@@ -36,30 +36,32 @@ c = 29979245800.0 				# Speed of light - [c] = cm/s
 sigma_T = 6.65e-25			    # Thomson cross section [sigma_T] = cm^2
 max_Q = 0.999999
 
-_priors = \
+_all_pars = 'Q', 'Ts', 'R', 'sigma'
+
+_priors_broad = \
 {
  'Ts': (0., 1000.),
  'Q': (0, 1),
- 'R_b': (0, 30),
- 'sigma_b': (0.05, 1.0),
- 'gamma_R': (-4, 4),
+ 'R': (0, 30),
+ 'sigma': (0.05, 1.0),
+ 'gamma': (-4, 4),
 }
 
 _guesses_broad = \
 {
  'Ts': (5., 150.),
  'Q': (0.2, 0.8),
- 'R_b': (0.5, 10.),
- 'sigma_b': (0.2, 0.8),
- 'gamma_R': (-1, 1),
+ 'R': (0.5, 10.),
+ 'sigma': (0.2, 0.8),
+ 'gamma': (-1, 1),
 }
 
 _bins = \
 {
  'Ts': np.arange(0, 500, 10),
  'Q': np.arange(-0.01, 1.01, 0.01),
- 'R_b': np.arange(0, 50, 0.2),
- 'sigma_b': np.arange(0.0, 1.0, 0.05),
+ 'R': np.arange(0, 50, 0.2),
+ 'sigma': np.arange(0.0, 1.0, 0.05),
 }
 
 _guesses_Q_tanh = {'p0': (6, 10), 'p1': (1, 4)}
@@ -70,34 +72,48 @@ _guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl,
     'broad': _guesses_broad['Q']}
 
 _guesses_R_pl = {'p0': (1., 5.), 'p1': (-9., -11.)}
-_guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R_b']}
+_guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
 _guesses_T = {'broad': _guesses_broad['Ts']}
-_guesses_s = {'broad': _guesses_broad['sigma_b']}
 
-_guesses = {'R_b': _guesses_R, 'Q': _guesses_Q, 'Ts': _guesses_T,
-    'sigma_b': _guesses_s}
+_guesses_s_pl = {'p0': (0.3, 0.6), 'p1': (-0.5, 0.5)}
+_guesses_s = {'pl': _guesses_s_pl, 'broad': _guesses_broad['sigma']}
+
+_guesses = {'R': _guesses_R, 'Q': _guesses_Q, 'Ts': _guesses_T,
+    'sigma': _guesses_s}
 
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
 _priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
+_priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl,
+    'broad': _priors_broad['Q']}
 
 _priors_R_pl = {'p0': (0, 30), 'p1': (-15, 0.)}
+_priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
 
-_priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl}
+_priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
+
+_priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
+_priors_T = {'broad': _priors_broad['Ts']}
+
+_priors = {'Q': _priors_Q, 'R': _priors_R, 'sigma': _priors_s,
+    'Ts': _priors_T}
 
 fit_kwargs = \
 {
  'fit_z': 0, # If None, fits all redshifts!
- 'Qprior': True,
- 'Rprior': True,
+
  'prior_tau': False,
  'prior_GP': False,
  'Qxdelta': False, # Otherwise, vary *increments* in Q.
  'Rxdelta': False, # Otherwise, vary *increments* in Q.
- 'Qfunc': None,
- 'Rfunc': None,
- 'Tfunc': None,
- 'sfunc': None,
+ 'Q_func': None,
+ 'R_func': None,
+ 'Ts_func': None,
+ 'sigma_func': None,
+ 'Q_monotonic': True,
+ 'R_monotonic': True,
+ 'Ts_monotonic': False,
+ 'sigma_monotonic': False,
 
  'kmin': 0.1,
  'kmax': 1,
@@ -295,39 +311,37 @@ class FitHelper(object):
                 prefix = 'bion_{}'.format(kwargs['bubbles_pdf'][0:4])
             else:
                 prefix = 'bhot_{}'.format(kwargs['bubbles_pdf'][0:4])
-            #else:
-            #    prefix = 'beq0'
 
             s_prior = ''
 
-            if kwargs['Qfunc'] is not None:
-                prefix += '_Q{}'.format(kwargs['Qfunc'])
+            if kwargs['Q_func'] is not None:
+                prefix += '_Q{}'.format(kwargs['Q_func'])
             else:
                 if kwargs['Qxdelta']:
                     prefix += '_vdQ'
 
-                if kwargs['Qprior']:
-                    s_prior += 'Qinc'
+                if kwargs['Q_monotonic']:
+                    s_prior += 'Qmon'
 
-            if kwargs['Rfunc'] is not None:
-                prefix += '_R{}'.format(kwargs['Rfunc'])
+            if kwargs['R_func'] is not None:
+                prefix += '_R{}'.format(kwargs['R_func'])
             else:
                 if kwargs['Rfree']:
-                    prefix += '_vRb'
+                    prefix += '_vR'
                 else:
                     prefix += '_vnb'
 
                 if kwargs['Rxdelta']:
                     prefix += '_vdR'
 
-                if kwargs['Rprior']:
-                    s_prior += 'Rinc'
+                if kwargs['R_monotonic']:
+                    s_prior += 'Rmon'
 
-            if kwargs['Tfunc'] is not None:
-                prefix += '_T{}'.format(kwargs['Tfunc'])
+            if kwargs['Ts_func'] is not None:
+                prefix += '_T{}'.format(kwargs['Ts_func'])
 
-            if kwargs['sfunc'] is not None:
-                prefix += '_s{}'.format(kwargs['sfunc'])
+            if kwargs['sigma_func'] is not None:
+                prefix += '_s{}'.format(kwargs['sigma_func'])
 
             if kwargs['prior_tau']:
                 prefix += '_ptau'
@@ -412,7 +426,7 @@ class FitHelper(object):
         return self._func_s
 
     def get_func(self, par):
-        name = par + 'func'
+        name = par + '_func'
         if self.kwargs[name] is None:
             func = None
         elif self.kwargs[name] == 'tanh':
@@ -426,22 +440,63 @@ class FitHelper(object):
 
         return func
 
-    def get_guesses_func(self, par_id):
+    def get_priors_func(self, par_id):
         # par_id something like Q_p0, s_p0, etc.
-        par = par_id[0]
-        num = par_id[2:]
+        par, num = par_id.split('_')
+        func = self.kwargs['{}_func'.format(par)]
 
-        return _guesses[par][num]
+        return _priors[par][func][num]
 
-    def get_guesses_flex(self, par_id):
-        pass
+    def get_guesses_func(self, i):
+        params, redshifts = self.pinfo
+        par_id = params[i]
+
+        # par_id something like Q_p0, s_p0, etc.
+        par, num = par_id.split('_')
+
+        func = self.kwargs['{}_func'.format(par)]
+
+        return _guesses[par][func][num]
+
+    def get_guesses_flex(self, i):
+        params, redshifts = self.pinfo
+        par = params[i]
+
+        # Can parameterize change in Q, R, rather than Q, R
+        # themselves.
+        if (par == 'Q') and self.kwargs['Qxdelta']:
+            lo, hi = 0, 0.2
+        elif par == 'Q':
+            if self.fit_z.size == 1:
+                lo, hi = 0, 1
+            else:
+                Q0 = Q_stagger(redshifts[i])
+                dQ = 1. / float(max(len(self.fit_zindex) - 1, 1))
+
+                lo = Q0 - 0.5 * dQ
+                hi = Q0 + 0.5 * dQ
+        elif (par == 'R') and self.kwargs['Rxdelta']:
+            lo, hi = 0, 2
+        elif par == 'R':
+            R0 = R_stagger(redshifts[i])
+            dR = 1. / float(max(len(self.fit_zindex) - 1, 1))
+
+            lo = R0 - 0.5 * dR
+            hi = R0 + 0.5 * dR
+        elif par == 'sigma' \
+            and self.kwargs['bubbles_pdf'][0:4] == 'plex':
+            lo, hi = _guesses['gamma']
+        else:
+            lo, hi = _guesses[par]['broad']
+
+        return lo, hi
 
     @property
     def num_parametric(self):
         if not hasattr(self, '_num_parametric'):
             num = 0
-            for par in ['Q', 'T', 'R', 's']:
-                num += self.kwargs['{}func'.format(par)] is not None
+            for par in ['Q', 'Ts', 'R', 'sigma']:
+                num += self.kwargs['{}_func'.format(par)] is not None
 
             self._num_parametric = num
 
@@ -450,8 +505,8 @@ class FitHelper(object):
     @property
     def nparams(self):
         N = 0
-        for par in ['Q', 'T', 'R', 's']:
-            func = self.kwargs['{}func'.format(par)]
+        for par in _all_pars:
+            func = self.kwargs['{}_func'.format(par)]
             is_func = func is not None
             if is_func:
                 if func in ['pl', 'tanh']:
@@ -472,50 +527,15 @@ class FitHelper(object):
 
         pos = np.zeros((nwalkers, self.nparams))
 
-        params, redshifts = self.get_param_info()
+        params, redshifts = self.pinfo
 
         for i, par in enumerate(params):
 
             # If parameterized, be careful
             if np.isinf(redshifts[i]):
-                # par will be something like Q_p0
-                lo, hi = self.get_guesses_func(par)
-                #if par.startswith('Q'):
-                #    post = par[2:]
-                #    lo, hi = _guesses_Q[self.kwargs['Qfunc']][post]
-                #elif par.startswith('R'):
-                #    post = par[2:]
-                #    lo, hi = _guesses_R_pl[post]
-
-                #else:
-                #    raise NotImplemented('help')
+                lo, hi = self.get_guesses_func(i)
             else:
-                # Can parameterize change in Q, R_b, rather than Q, R_b
-                # themselves.
-                if (par == 'Q') and self.kwargs['Qxdelta']:
-                    lo, hi = 0, 0.2
-                elif par == 'Q':
-                    if self.fit_z.size == 1:
-                        lo, hi = 0, 1
-                    else:
-                        Q0 = Q_stagger(redshifts[i])
-                        dQ = 1. / float(max(len(self.fit_zindex) - 1, 1))
-
-                        lo = Q0 - 0.5 * dQ
-                        hi = Q0 + 0.5 * dQ
-                elif (par == 'R_b') and self.kwargs['Rxdelta']:
-                    lo, hi = 0, 2
-                elif par == 'R_b':
-                    R0 = R_stagger(redshifts[i])
-                    dR = 1. / float(max(len(self.fit_zindex) - 1, 1))
-
-                    lo = R0 - 0.5 * dR
-                    hi = R0 + 0.5 * dR
-                elif par == 'sigma_b' \
-                    and self.kwargs['bubbles_pdf'][0:4] == 'plex':
-                    lo, hi = _guesses['gamma_R']
-                else:
-                    lo, hi = _guesses[par]['broad']
+                lo, hi = self.get_guesses_flex(i)
 
             pos[:,i] = lo + np.random.rand(nwalkers) * (hi - lo)
 
@@ -540,27 +560,27 @@ class FitHelper(object):
 
             for j, par in enumerate(self.model.params):
 
-                if (par == 'Q') and (self.func_Q is not None):
-                    continue
-                if (par == 'R_b') and (self.func_R is not None):
+                if self.kwargs['{}_func'.format(par)] is not None:
                     continue
 
                 param_z.append(_z_)
                 param_names.append(par)
 
-
         # If parameterizing Q or R, these will be at the end.
         if self.func_Q is not None:
-            if self.kwargs['Qfunc'] in ['tanh', 'pl']:
+            if self.kwargs['Q_func'] in ['tanh', 'pl']:
                 param_z.extend([-np.inf]*2)
                 param_names.extend(['Q_p0', 'Q_p1'])
-            elif self.kwargs['Qfunc'] == 'bpl':
+            elif self.kwargs['Q_func'] == 'bpl':
                 param_z.extend([-np.inf]*4)
                 param_names.extend(['Q_p0', 'Q_p1', 'Q_p2', 'Q_p3'])
             else:
-                raise NotImplemented('help')
+                raise NotImplementedError('Unrecognized function {}'.format(
+                    self.kwargs['Q_func']
+                ))
 
         if self.func_R is not None:
+            assert self.kwargs['R_func'] == 'pl'
             param_z.extend([-np.inf]*2)
             param_names.extend(['R_p0', 'R_p1'])
 
@@ -571,7 +591,7 @@ class FitHelper(object):
         Read previous output and generate new positions for walkers.
         """
 
-        f = open(fn, 'rb')
+        f = open(fn, 'r')
         data_pre = pickle.load(f)
         f.close()
 
@@ -681,8 +701,8 @@ class FitHelper(object):
             if (par == 'Q') and (self.func_Q is not None):
                 _args = extract_params(allpars, args, 'Q')
                 pars['Q'] = self.func_Q(z, _args)
-            elif (par == 'R_b') and (self.func_R is not None):
-                pars['R_b'] = self.func_R(z, args[-2:])
+            elif (par == 'R') and (self.func_R is not None):
+                pars['R'] = self.func_R(z, args[-2:])
             else:
 
                 pok = np.zeros(len(allpars))
@@ -719,43 +739,48 @@ class FitHelper(object):
 
         Q = []
         R = []
-        Qpars = []
+        parevol = {par: [] for par in _all_pars}
         Rpars = []
-        for i, par in enumerate(params):
+        for i, par_id in enumerate(params):
             if np.isinf(redshifts[i]):
-                if par.startswith('Q'):
-                    post = par[2:]
-                    Qpars.append(par)
-                    lo, hi = _priors_Q[self.kwargs['Qfunc']][post]
 
-                elif par.startswith('R'):
-                    post = par[2:]
-                    Rpars.append(par)
-                    lo, hi = _priors_R_pl[post]
-                else:
-                    raise NotImplemented('help')
+                lo, hi = self.get_priors_func(par_id)
+
+                #par, num = par.split('_')
+#
+                #if par.startswith('Q'):
+                #    post = par[2:]
+                #    Qpars.append(par)
+                #    lo, hi = _priors_Q[self.kwargs['Q_func']][post]
+#
+                #elif par.startswith('R'):
+                #    post = par[2:]
+                #    Rpars.append(par)
+                #    lo, hi = _priors_R_pl[post]
+                #else:
+                #    raise NotImplemented('help')
             else:
-                # Can parameterize change in Q, R_b, rather than Q, R_b
-                # themselves.
-                if par == 'sigma_b' and self.kwargs['bubbles_pdf'][0:4] == 'plex':
-                    lo, hi = _priors['gamma_R']
-                else:
-                    lo, hi = _priors[par]
 
-            if par == 'Q':
-                Q.append(args[i])
-            elif par == 'R':
-                R.append(args[i])
+                par = par_id
+
+                # Can parameterize change in Q, R, rather than Q, R
+                # themselves.
+                if par == 'sigma' and self.kwargs['bubbles_pdf'][0:4] == 'plex':
+                    lo, hi = _priors['gamma']
+                else:
+                    lo, hi = _priors[par]['broad']
+
+            parevol[par].append(args[i])
 
             if not (lo <= args[i] <= hi):
                 return -np.inf
 
-
-        if self.kwargs['Qprior'] and (self.func_Q is None):
-            if not np.all(np.diff(Q) < 0):
-                return -np.inf
-        if self.kwargs['Rprior'] and (self.func_R is None):
-            if not np.all(np.diff(R) < 0):
+        for par in _all_pars:
+            if not self.kwargs['{}_monotonic'.format(par)]:
+                continue
+            if (self.kwargs['{}_func'.format(par)]) is not None:
+                continue
+            if not np.all(np.diff(parevol[par]) < 0):
                 return -np.inf
 
         ##

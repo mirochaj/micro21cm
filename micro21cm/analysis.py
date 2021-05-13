@@ -23,10 +23,10 @@ from .util import labels, bin_e2c, bin_c2e, get_error_2d
 _default_modes = np.logspace(-1, 0., 21)
 _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
-_default_labels = {'Q': r'$Q$', 'R_b': r'$R_b$', 'Ts': r'$T_S$',
-    'sigma_b': r'$\sigma_b$'}
-_default_limits = {'Q': (-0.05, 1.05), 'R_b': (0, 15), 'Ts': (0, 150),
-    'sigma_b': (0, 1)}
+_default_labels = {'Q': r'$Q$', 'R': r'$R$', 'Ts': r'$T_S$',
+    'sigma': r'$\sigma$'}
+_default_limits = {'Q': (-0.05, 1.05), 'R': (0, 15), 'Ts': (0, 150),
+    'sigma': (0, 1)}
 _default_z = np.arange(5, 20, 0.05)
 
 
@@ -207,8 +207,8 @@ class AnalyzeFit(object):
 
         params, redshifts = self.data['pinfo']
 
-        nrows = ('Ts' in params) + ('sigma_b' in params) \
-            + ('Q' in params) + ('R_b' in params) \
+        nrows = ('Ts' in params) + ('sigma' in params) \
+            + ('Q' in params) + ('R' in params) \
             + ('Q_p0' in params) + ('R_p0' in params)
 
         ncols = max(self.data['zfit'].size,
@@ -434,7 +434,7 @@ class AnalyzeFit(object):
             ibest = ibest[0]
 
         # First, deal with parametric results if we have them.
-        for _par_ in ['Q', 'R_b']:
+        for _par_ in ['Q', 'R']:
             if (par != _par_):
                 continue
 
@@ -522,7 +522,7 @@ class AnalyzeFit(object):
             if (_par_ != par):
                 continue
 
-            #if (_par_ == 'R_b') and (self.data['kwargs']['Rxdelta'] is not None):
+            #if (_par_ == 'R') and (self.data['kwargs']['Rxdelta'] is not None):
             #    continue
             #else:
             best = chain[ibest[0], ibest[1],i]

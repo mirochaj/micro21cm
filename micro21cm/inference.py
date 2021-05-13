@@ -449,9 +449,7 @@ class FitHelper(object):
 
     @property
     def nparams(self):
-
-        N = (len(self.model.params) - self.num_parametric) * self.fit_zindex.size
-
+        N = 0
         for par in ['Q', 'T', 'R', 's']:
             func = self.kwargs['{}func'.format(par)]
             is_func = func is not None

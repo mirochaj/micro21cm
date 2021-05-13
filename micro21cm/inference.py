@@ -45,7 +45,7 @@ _priors = \
  'gamma_R': (-4, 4),
 }
 
-_guesses = \
+_guesses_broad = \
 {
  'Ts': (5., 150.),
  'Q': (0.2, 0.8),
@@ -65,15 +65,23 @@ _bins = \
 _guesses_Q_tanh = {'p0': (6, 10), 'p1': (1, 4)}
 _guesses_Q_bpl = {'p0': (0.25, 0.75), 'p1': (6, 10), 'p2': (-3, -1),
     'p3': (-4, -2)}
-_guesses_R_pl = {'p0': (1., 5.), 'p1': (-9., -11.)}
 
-_guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl}
+_guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl,
+    'broad': _guesses_broad['Q']}
+
+_guesses_R_pl = {'p0': (1., 5.), 'p1': (-9., -11.)}
+_guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R_b']}
+
+_guesses_T = {'broad': _guesses_broad['Ts']}
+_guesses_s = {'broad': _guesses_broad['sigma_b']}
+
+_guesses = {'R_b': _guesses_R, 'Q': _guesses_Q, 'Ts': _guesses_T,
+    'sigma_b': _guesses_s}
 
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
 _priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
 
 _priors_R_pl = {'p0': (0, 30), 'p1': (-15, 0.)}
-
 
 _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl}
 
@@ -88,6 +96,8 @@ fit_kwargs = \
  'Rxdelta': False, # Otherwise, vary *increments* in Q.
  'Qfunc': None,
  'Rfunc': None,
+ 'Tfunc': None,
+ 'sfunc': None,
 
  'kmin': 0.1,
  'kmax': 1,
@@ -313,6 +323,12 @@ class FitHelper(object):
                 if kwargs['Rprior']:
                     s_prior += 'Rinc'
 
+            if kwargs['Tfunc'] is not None:
+                prefix += '_T{}'.format(kwargs['Tfunc'])
+
+            if kwargs['sfunc'] is not None:
+                prefix += '_s{}'.format(kwargs['sfunc'])
+
             if kwargs['prior_tau']:
                 prefix += '_ptau'
 
@@ -380,36 +396,55 @@ class FitHelper(object):
     @property
     def func_Q(self):
         if not hasattr(self, '_func_Q'):
-            if self.kwargs['Qfunc'] is None:
-                self._func_Q = None
-            elif self.kwargs['Qfunc'] == 'tanh':
-                self._func_Q = lambda z, pars: tanh_generic(z, pars)
-            elif self.kwargs['Qfunc'] == 'pl':
-                self._func_Q = lambda z, pars: power_law_max1(z, pars)
-            elif self.kwargs['Qfunc'] == 'bpl':
-                self._func_Q = lambda z, pars: broken_power_law_max1(z, pars)
-            else:
-                raise NotImplemented('help')
-
+            self._func_Q = self.get_func('Q')
         return self._func_Q
 
     @property
     def func_R(self):
         if not hasattr(self, '_func_R'):
-            if self.kwargs['Rfunc'] is None:
-                self._func_R = None
-            elif self.kwargs['Rfunc'] == 'pl':
-                self._func_R = lambda z, pars: power_law(z, pars)
-            else:
-                raise NotImplemented('help')
-
+            self._func_R = self.get_func('R')
         return self._func_R
+
+    @property
+    def func_sigma(self):
+        if not hasattr(self, '_func_s'):
+            self._func_s = self.get_func('s')
+        return self._func_s
+
+    def get_func(self, par):
+        name = par + 'func'
+        if self.kwargs[name] is None:
+            func = None
+        elif self.kwargs[name] == 'tanh':
+            func = lambda z, pars: tanh_generic(z, pars)
+        elif self.kwargs[name] == 'pl':
+            func = lambda z, pars: power_law_max1(z, pars)
+        elif self.kwargs[name] == 'bpl':
+            func = lambda z, pars: broken_power_law_max1(z, pars)
+        else:
+            raise NotImplemented('help')
+
+        return func
+
+    def get_guesses_func(self, par_id):
+        # par_id something like Q_p0, s_p0, etc.
+        par = par_id[0]
+        num = par_id[2:]
+
+        return _guesses[par][num]
+
+    def get_guesses_flex(self, par_id):
+        pass
 
     @property
     def num_parametric(self):
         if not hasattr(self, '_num_parametric'):
-            self._num_parametric = (self.kwargs['Qfunc'] is not None) \
-                + (self.kwargs['Rfunc'] is not None)
+            num = 0
+            for par in ['Q', 'T', 'R', 's']:
+                num += self.kwargs['{}func'.format(par)] is not None
+
+            self._num_parametric = num
+
         return self._num_parametric
 
     @property
@@ -417,13 +452,16 @@ class FitHelper(object):
 
         N = (len(self.model.params) - self.num_parametric) * self.fit_zindex.size
 
-        if self.kwargs['Qfunc'] in ['pl', 'tanh']:
-            N += 2
-        elif self.kwargs['Qfunc'] == 'bpl':
-            N += 4
-
-        if self.kwargs['Rfunc'] in ['pl']:
-            N += 2
+        for par in ['Q', 'T', 'R', 's']:
+            func = self.kwargs['{}func'.format(par)]
+            is_func = func is not None
+            if is_func:
+                if func in ['pl', 'tanh']:
+                    N += 2
+                elif func == 'bpl':
+                    N += 4
+            else:
+                N += self.fit_zindex.size
 
         return N
 
@@ -442,14 +480,17 @@ class FitHelper(object):
 
             # If parameterized, be careful
             if np.isinf(redshifts[i]):
-                if par.startswith('Q'):
-                    post = par[2:]
-                    lo, hi = _guesses_Q[self.kwargs['Qfunc']][post]
-                elif par.startswith('R'):
-                    post = par[2:]
-                    lo, hi = _guesses_R_pl[post]
-                else:
-                    raise NotImplemented('help')
+                # par will be something like Q_p0
+                lo, hi = self.get_guesses_func(par)
+                #if par.startswith('Q'):
+                #    post = par[2:]
+                #    lo, hi = _guesses_Q[self.kwargs['Qfunc']][post]
+                #elif par.startswith('R'):
+                #    post = par[2:]
+                #    lo, hi = _guesses_R_pl[post]
+
+                #else:
+                #    raise NotImplemented('help')
             else:
                 # Can parameterize change in Q, R_b, rather than Q, R_b
                 # themselves.
@@ -476,7 +517,7 @@ class FitHelper(object):
                     and self.kwargs['bubbles_pdf'][0:4] == 'plex':
                     lo, hi = _guesses['gamma_R']
                 else:
-                    lo, hi = _guesses[par]
+                    lo, hi = _guesses[par]['broad']
 
             pos[:,i] = lo + np.random.rand(nwalkers) * (hi - lo)
 

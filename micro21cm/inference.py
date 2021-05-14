@@ -422,8 +422,19 @@ class FitHelper(object):
     @property
     def func_sigma(self):
         if not hasattr(self, '_func_s'):
-            self._func_s = self.get_func('s')
+            self._func_s = self.get_func('sigma')
         return self._func_s
+
+    def func(self, par):
+        if par == 'Q':
+            return self.func_Q
+        elif par == 'R':
+            return self.func_R
+        elif par == 'sigma':
+            return self.func_sigma
+        else:
+            return None
+
 
     def get_func(self, par):
         name = par + '_func'
@@ -546,12 +557,6 @@ class FitHelper(object):
         Figure out mapping from parameter list to parameter names and redshifts.
         """
 
-        par_per_z = len(self.model.params)
-        if self.func_Q is not None:
-            par_per_z -= 1
-        if self.func_R is not None:
-            par_per_z -= 1
-
         ct = 0
         param_z = []
         param_names = []
@@ -583,6 +588,11 @@ class FitHelper(object):
             assert self.kwargs['R_func'] == 'pl'
             param_z.extend([-np.inf]*2)
             param_names.extend(['R_p0', 'R_p1'])
+
+        if self.func_sigma is not None:
+            assert self.kwargs['sigma_func'] == 'pl'
+            param_z.extend([-np.inf]*2)
+            param_names.extend(['sigma_p0', 'sigma_p1'])
 
         return param_names, param_z
 
@@ -697,12 +707,10 @@ class FitHelper(object):
         pars = {}
         for i, par in enumerate(model.params):
 
-            # Check for parametric options
-            if (par == 'Q') and (self.func_Q is not None):
+            if self.kwargs['{}_func'.format(par)] is not None:
                 _args = extract_params(allpars, args, 'Q')
-                pars['Q'] = self.func_Q(z, _args)
-            elif (par == 'R') and (self.func_R is not None):
-                pars['R'] = self.func_R(z, args[-2:])
+                pars[par] = self.func(par)(z, _args)
+
             else:
 
                 pok = np.zeros(len(allpars))
@@ -743,24 +751,8 @@ class FitHelper(object):
         Rpars = []
         for i, par_id in enumerate(params):
             if np.isinf(redshifts[i]):
-
                 lo, hi = self.get_priors_func(par_id)
-
-                #par, num = par.split('_')
-#
-                #if par.startswith('Q'):
-                #    post = par[2:]
-                #    Qpars.append(par)
-                #    lo, hi = _priors_Q[self.kwargs['Q_func']][post]
-#
-                #elif par.startswith('R'):
-                #    post = par[2:]
-                #    Rpars.append(par)
-                #    lo, hi = _priors_R_pl[post]
-                #else:
-                #    raise NotImplemented('help')
             else:
-
                 par = par_id
 
                 # Can parameterize change in Q, R, rather than Q, R
@@ -784,13 +776,15 @@ class FitHelper(object):
                 return -np.inf
 
         ##
-        # Check for priors on tau, Q(z)
+        # Check for priors on Q(z=late in reionization)
         if type(self.kwargs['prior_GP']) in [list, tuple, np.ndarray]:
             zp, Qp = self.kwargs['prior_GP']
             _pars = [args[params.index(element)] for element in Qpars]
             if self.func_Q(zp, _pars) < Qp:
                 return -np.inf
 
+        ##
+        # Check for priors on tau
         lnP = 0.
         if self.kwargs['prior_tau'] not in [None, False, 0]:
             # Assume Gaussian

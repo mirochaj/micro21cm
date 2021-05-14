@@ -17,7 +17,7 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
 from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
-    broken_power_law, broken_power_law_max1, extract_params
+    broken_power_law, broken_power_law_max1, extract_params, _all_pars
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
@@ -207,9 +207,7 @@ class AnalyzeFit(object):
 
         params, redshifts = self.data['pinfo']
 
-        nrows = ('Ts' in params) + ('sigma' in params) \
-            + ('Q' in params) + ('R' in params) \
-            + ('Q_p0' in params) + ('R_p0' in params)
+        nrows = len(_all_pars)
 
         ncols = max(self.data['zfit'].size,
             sum([par.startswith('Q') for par in params]))
@@ -236,16 +234,16 @@ class AnalyzeFit(object):
         zunique = np.unique(redshifts)
         zunique = zunique[np.isfinite(zunique)]
 
+        ct = 0
         for i, par in enumerate(params):
 
             _z_ = redshifts[i]
 
             # Special cases: parametric elements of model
             if np.isinf(_z_):
-                if par.startswith('Q'):
-                    _i = -2
-                else:
-                    _i = -1
+                parname, parnum = par.split('_')
+
+                _i = _all_pars.index(parname)
 
                 _j = int(par[-1])
                 ylab = par[0]
@@ -254,8 +252,7 @@ class AnalyzeFit(object):
                     xycoords='axes fraction', ha='left', va='top')
 
             else:
-
-                _i = punique.index(par)
+                _i = _all_pars.index(par)
                 _j = np.argmin(np.abs(zunique - _z_))
                 ylab = par
 

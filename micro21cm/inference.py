@@ -115,6 +115,8 @@ fit_kwargs = \
  'Ts_monotonic': False,
  'sigma_monotonic': False,
 
+ 'Ts_log10': False,
+
  'kmin': 0.1,
  'kmax': 1,
  'kthin': None,
@@ -548,6 +550,10 @@ class FitHelper(object):
             else:
                 lo, hi = self.get_guesses_flex(i)
 
+            if par == 'Ts' and self.kwargs['Ts_log10']:
+                lo = np.log10(lo)
+                hi = np.log10(hi)
+
             pos[:,i] = lo + np.random.rand(nwalkers) * (hi - lo)
 
         return pos
@@ -601,7 +607,7 @@ class FitHelper(object):
         Read previous output and generate new positions for walkers.
         """
 
-        f = open(fn, 'r')
+        f = open(fn, 'rb')
         data_pre = pickle.load(f)
         f.close()
 
@@ -733,7 +739,10 @@ class FitHelper(object):
 
                 j = int(np.argwhere(ok==1))
 
-                pars[par] = args[j]
+                if par == 'Ts' and self.kwargs['Ts_log10']:
+                    pars[par] = 10**args[j]
+                else:
+                    pars[par] = args[j]
 
         if pars == {}:
             return None
@@ -759,6 +768,8 @@ class FitHelper(object):
                 # themselves.
                 if par == 'sigma' and self.kwargs['bubbles_pdf'][0:4] == 'plex':
                     lo, hi = _priors['gamma']
+                elif par == 'Ts' and self.kwargs['Ts_log10']:
+                    lo, hi = np.log10(_priors[par]['broad'])
                 else:
                     lo, hi = _priors[par]['broad']
 

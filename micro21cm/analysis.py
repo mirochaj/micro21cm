@@ -177,6 +177,7 @@ class AnalyzeFit(object):
                         _ax.contourf(bc2, bc1, hist.T / hist.max(),
                             levels, zorder=4, **kwargs)
                     else:
+                        print('hey', i, j, labels[i], labels[j], levels)
                         _ax.contour(bc2, bc1, hist.T / hist.max(),
                             levels, zorder=4, **kwargs)
                 else:

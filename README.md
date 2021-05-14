@@ -21,7 +21,7 @@ model = micro21cm.BubbleModel()
 k = np.logspace(-1., 0, 21)
 
 # Compute P(k)
-ps = model.get_ps_21cm(z=8., k=k, Ts=3., Q=0.5, R_b=3., sigma_b=0.3)
+ps = model.get_ps_21cm(z=8., k=k, Ts=3., Q=0.5, R=3., sigma=0.3)
 
 # Plot dimensionless power spectrum
 pl.loglog(k, k**3 * ps / 2. / np.pi**2)

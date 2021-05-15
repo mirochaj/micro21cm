@@ -36,7 +36,7 @@ c = 29979245800.0 				# Speed of light - [c] = cm/s
 sigma_T = 6.65e-25			    # Thomson cross section [sigma_T] = cm^2
 max_Q = 0.999999
 
-_all_pars = 'Q', 'Ts', 'R', 'sigma'
+_all_pars = ['Q', 'Ts', 'R', 'sigma']
 
 _priors_broad = \
 {

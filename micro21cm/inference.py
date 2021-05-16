@@ -121,6 +121,7 @@ fit_kwargs = \
  'kmax': 1,
  'kthin': None,
  'invert_logL': False,
+ 'upper_limits': False,
 
  'bubbles_ion': 'ion',      # or 'hot' or False
  'bubbles_pdf': 'lognormal',
@@ -754,10 +755,7 @@ class FitHelper(object):
         model = self.model
         params, redshifts = self.get_param_info()
 
-        Q = []
-        R = []
         parevol = {par: [] for par in _all_pars}
-        Rpars = []
         for i, par_id in enumerate(params):
             if np.isinf(redshifts[i]):
                 lo, hi = self.get_priors_func(par_id)
@@ -790,8 +788,8 @@ class FitHelper(object):
         # Check for priors on Q(z=late in reionization)
         if type(self.kwargs['prior_GP']) in [list, tuple, np.ndarray]:
             zp, Qp = self.kwargs['prior_GP']
-            _pars = [args[params.index(element)] for element in Qpars]
-            if self.func_Q(zp, _pars) < Qp:
+            Qpars = extract_params(params, args, 'Q')
+            if self.func_Q(zp, Qpars) < Qp:
                 return -np.inf
 
         ##
@@ -799,8 +797,8 @@ class FitHelper(object):
         lnP = 0.
         if self.kwargs['prior_tau'] not in [None, False, 0]:
             # Assume Gaussian
-            _pars = [args[params.index(element)] for element in Qpars]
-            tau = self.get_tau(_pars)
+            Qpars = extract_params(params, args, 'Q')
+            tau = self.get_tau(Qpars)
             lnP -= np.log(_normal(tau, 1., 0.055, 0.009))
 
         # If we made it this far, everything is OK

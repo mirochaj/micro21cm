@@ -116,7 +116,7 @@ fit_kwargs = \
  'Ts_monotonic': False,
  'sigma_monotonic': False,
 
- 'Ts_log10': False,
+ 'Ts_log10': True,
 
  'kmin': 0.1,
  'kmax': 1,

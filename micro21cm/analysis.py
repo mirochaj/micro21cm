@@ -25,9 +25,9 @@ _default_modes = np.logspace(-1, 0., 21)
 _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
 _default_labels = {'Q': r'$Q$', 'R': r'$R$', 'Ts': r'$T_S$',
-    'sigma': r'$\sigma$'}
+    'sigma': r'$\sigma$', 'gamma': r'$\gamma$'}
 _default_limits = {'Q': (-0.05, 1.05), 'R': (0, 15), 'Ts': (0, 150),
-    'sigma': (0, 1)}
+    'sigma': (0, 1), 'gamma': (-3, 3)}
 _default_z = np.arange(5, 20, 0.05)
 
 
@@ -253,7 +253,7 @@ class AnalyzeFit(object):
                 _i = self.model.params.index(parname)
 
                 _j = int(par[-1])
-                ylab = par[0]
+                ylab = par.split('_')[0]
 
                 axes[_i][_j].annotate(par, (0.05, 0.95), bbox=bbox,
                     xycoords='axes fraction', ha='left', va='top')
@@ -261,7 +261,7 @@ class AnalyzeFit(object):
             else:
                 _i = self.model.params.index(par)
                 _j = np.argmin(np.abs(zunique - _z_))
-                ylab = par
+                ylab = _default_labels[par]
 
                 axes[_i][_j].annotate(r'$z=%.2f$' % _z_, (0.05, 0.95),
                     xycoords='axes fraction', ha='left', va='top',

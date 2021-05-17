@@ -111,10 +111,12 @@ fit_kwargs = \
  'R_func': None,
  'Ts_func': None,
  'sigma_func': None,
+ 'gamma_func': None,
  'Q_monotonic': True,
  'R_monotonic': True,
  'Ts_monotonic': False,
  'sigma_monotonic': False,
+ 'gamma_monotonic': False,
 
  'Ts_log10': True,
 
@@ -429,6 +431,12 @@ class FitHelper(object):
             self._func_s = self.get_func('sigma')
         return self._func_s
 
+    @property
+    def func_gamma(self):
+        if not hasattr(self, '_func_g'):
+            self._func_s = self.get_func('gamma')
+        return self._func_s
+
     def func(self, par):
         if par == 'Q':
             return self.func_Q
@@ -436,6 +444,8 @@ class FitHelper(object):
             return self.func_R
         elif par == 'sigma':
             return self.func_sigma
+        elif par == 'gamma':
+            return self.func_gamma
         else:
             return None
 
@@ -507,7 +517,7 @@ class FitHelper(object):
     def num_parametric(self):
         if not hasattr(self, '_num_parametric'):
             num = 0
-            for par in ['Q', 'Ts', 'R', 'sigma']:
+            for par in self.model.params:
                 num += self.kwargs['{}_func'.format(par)] is not None
 
             self._num_parametric = num
@@ -760,11 +770,7 @@ class FitHelper(object):
             else:
                 par = par_id
 
-                # Can parameterize change in Q, R, rather than Q, R
-                # themselves.
-                if par == 'sigma' and self.kwargs['bubbles_pdf'][0:4] == 'plex':
-                    lo, hi = _priors['gamma']
-                elif par == 'Ts' and self.kwargs['Ts_log10']:
+                if par == 'Ts' and self.kwargs['Ts_log10']:
                     lo, hi = np.log10(_priors[par]['broad'])
                 else:
                     lo, hi = _priors[par]['broad']

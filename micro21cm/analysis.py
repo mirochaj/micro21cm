@@ -13,11 +13,12 @@ Description:
 import pickle
 import numpy as np
 import matplotlib.pyplot as pl
+from .models import BubbleModel
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
 from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
-    broken_power_law, broken_power_law_max1, extract_params, _all_pars
+    broken_power_law, broken_power_law_max1, extract_params
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
@@ -45,6 +46,12 @@ class AnalyzeFit(object):
                 self._data = pickle.load(f)
 
         return self._data
+
+    @property
+    def model(self):
+        if not hasattr(self, '_model'):
+            self._model = BubbleModel(**self.data['kwargs'])
+        return self._model
 
     def get_labels(self, pars):
 
@@ -207,7 +214,7 @@ class AnalyzeFit(object):
 
         params, redshifts = self.data['pinfo']
 
-        nrows = len(_all_pars)
+        nrows = len(self.model.params)
 
         ncols = max(self.data['zfit'].size,
             sum([par.startswith('Q') for par in params]))
@@ -243,7 +250,7 @@ class AnalyzeFit(object):
             if np.isinf(_z_):
                 parname, parnum = par.split('_')
 
-                _i = _all_pars.index(parname)
+                _i = self.model.params.index(parname)
 
                 _j = int(par[-1])
                 ylab = par[0]
@@ -252,7 +259,7 @@ class AnalyzeFit(object):
                     xycoords='axes fraction', ha='left', va='top')
 
             else:
-                _i = _all_pars.index(par)
+                _i = self.model.params.index(par)
                 _j = np.argmin(np.abs(zunique - _z_))
                 ylab = par
 

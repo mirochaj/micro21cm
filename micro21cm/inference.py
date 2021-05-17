@@ -36,8 +36,6 @@ c = 29979245800.0 				# Speed of light - [c] = cm/s
 sigma_T = 6.65e-25			    # Thomson cross section [sigma_T] = cm^2
 max_Q = 0.999999
 
-_all_pars = ['Q', 'Ts', 'R', 'sigma']
-
 _priors_broad = \
 {
  'Ts': (1e-2, 1000.),
@@ -53,7 +51,7 @@ _guesses_broad = \
  'Q': (0.2, 0.8),
  'R': (0.5, 10.),
  'sigma': (0.2, 0.8),
- 'gamma': (-1, 1),
+ 'gamma': (-2, 2),
 }
 
 _bins = \
@@ -79,8 +77,10 @@ _guesses_T = {'broad': _guesses_broad['Ts']}
 _guesses_s_pl = {'p0': (0.3, 0.6), 'p1': (-0.5, 0.5)}
 _guesses_s = {'pl': _guesses_s_pl, 'broad': _guesses_broad['sigma']}
 
+_guesses_g = {'broad': _guesses_broad['gamma']}
+
 _guesses = {'R': _guesses_R, 'Q': _guesses_Q, 'Ts': _guesses_T,
-    'sigma': _guesses_s}
+    'sigma': _guesses_s, 'gamma': _guesses_g}
 
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
 _priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
@@ -94,9 +94,10 @@ _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
 
 _priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
 _priors_T = {'broad': _priors_broad['Ts']}
+_priors_g = {'broad': _priors_broad['gamma']}
 
 _priors = {'Q': _priors_Q, 'R': _priors_R, 'sigma': _priors_s,
-    'Ts': _priors_T}
+    'Ts': _priors_T, 'gamma': _priors_g}
 
 fit_kwargs = \
 {
@@ -497,9 +498,6 @@ class FitHelper(object):
 
             lo = R0 - 0.5 * dR
             hi = R0 + 0.5 * dR
-        elif par == 'sigma' \
-            and self.kwargs['bubbles_pdf'][0:4] == 'plex':
-            lo, hi = _guesses['gamma']
         else:
             lo, hi = _guesses[par]['broad']
 
@@ -519,7 +517,7 @@ class FitHelper(object):
     @property
     def nparams(self):
         N = 0
-        for par in _all_pars:
+        for par in self.model.params:
             func = self.kwargs['{}_func'.format(par)]
             is_func = func is not None
             if is_func:
@@ -619,7 +617,7 @@ class FitHelper(object):
         warning += 'Previous run ({}) used {}'.format(fn, nwalkers_p)
         assert nwalkers_p == kwargs['nwalkers'], warning
         print("% Restarting from output {}.".format(fn))
-        print("% Will augment {} samples there with {} more.".format(
+        print("% Will augment {} samples/walker there with {} more (per walker).".format(
             steps_p, kwargs['steps']))
 
         # Set initial walker positions
@@ -755,7 +753,7 @@ class FitHelper(object):
         model = self.model
         params, redshifts = self.get_param_info()
 
-        parevol = {par: [] for par in _all_pars}
+        parevol = {par: [] for par in self.model.params}
         for i, par_id in enumerate(params):
             if np.isinf(redshifts[i]):
                 lo, hi = self.get_priors_func(par_id)
@@ -776,7 +774,7 @@ class FitHelper(object):
             if not (lo <= args[i] <= hi):
                 return -np.inf
 
-        for par in _all_pars:
+        for par in self.model.params:
             if not self.kwargs['{}_monotonic'.format(par)]:
                 continue
             if (self.kwargs['{}_func'.format(par)]) is not None:

@@ -42,7 +42,7 @@ _priors_broad = \
  'Q': (0, 1),
  'R': (0, 30),
  'sigma': (0.05, 1.0),
- 'gamma': (-4, 4),
+ 'gamma': (-1.5, 4),
 }
 
 _guesses_broad = \
@@ -51,7 +51,7 @@ _guesses_broad = \
  'Q': (0.2, 0.8),
  'R': (0.5, 10.),
  'sigma': (0.2, 0.8),
- 'gamma': (-2, 2),
+ 'gamma': (-1, 1),
 }
 
 _bins = \

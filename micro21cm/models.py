@@ -12,13 +12,17 @@ Description:
 
 import camb
 import numpy as np
-import powerbox as pbox
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz, quad
 from scipy.special import erfcinv, erf, erfc
 from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
     Tgadiabaticfit
+
+try:
+    import powerbox as pbox
+except ImportError:
+    pass
 
 tiny_Q = 1e-3
 

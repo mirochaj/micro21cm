@@ -13,12 +13,16 @@ Description:
 import os
 import sys
 import time
-import emcee
 import pickle
 import numpy as np
 from scipy.special import erf
 from .models import BubbleModel
 from scipy.integrate import quad
+
+try:
+    import emcee
+except ImportError:
+    pass
 
 try:
     from mpi4py import MPI

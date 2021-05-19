@@ -536,6 +536,12 @@ class AnalyzeFit(object):
             _lo = (1. - conflevel) * 100 / 2.
             _hi = 100 - _lo
             lo, hi = np.percentile(_chain, (_lo, _hi), axis=0)
+
+            if _par_ == 'Ts' and self.data['kwargs']['Ts_log10']:
+                lo = 10**lo
+                hi = 10**hi
+                best = 10**best
+
             ax.plot([z+zoffset]*2, [lo, hi], **kwargs)
             ax.scatter([z+zoffset]*2, [best]*2, **marker_kw)
 

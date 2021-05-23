@@ -21,7 +21,7 @@ except ImportError:
 
 labels = \
 {
- 'R': r'$R / [\mathrm{Mpc} \ h^{-1}]$',
+ 'R': r'$R / [h^{-1} \ \mathrm{Mpc}]$',
  'k': r'$k / [h \ \mathrm{cMpc}^{-1}]$',
  'pofk': r'$P(k)$',
  'cf21': r'$\xi_{21}(R)$',
@@ -32,6 +32,8 @@ labels = \
  'Q_ion': r'$Q_{\mathrm{ion}}$',
  'Q_hot': r'$Q_{\mathrm{hot}}$',
  'xHI': r'$x_{\mathrm{HI}}$',
+ 'bsd': r'$dn /d\log R$',
+ 'bsd_normed': r'$Q^{-1} V dn/d\log R$',
 }
 
 def get_cf_from_ps(R, f_ps, kmin=1e-4, kmax=5000., rtol=1e-5, atol=1e-5):

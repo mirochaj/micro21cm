@@ -46,7 +46,7 @@ _priors_broad = \
  'Q': (0, 1),
  'R': (0, 30),
  'sigma': (0.05, 2),
- 'gamma': (-4, 4),
+ 'gamma': (-5, 4),
 }
 
 _guesses_broad = \
@@ -55,7 +55,7 @@ _guesses_broad = \
  'Q': (0.2, 0.8),
  'R': (0.5, 10.),
  'sigma': (0.6, 1.5),
- 'gamma': (-1, 1),
+ 'gamma': (-4, -2),
 }
 
 _bins = \
@@ -137,7 +137,8 @@ fit_kwargs = \
 
  'restart': True,
  'regroup_after': None,
- 'steps': 10,
+ 'steps': 100,
+ 'checkpoint': 10,
  'nwalkers': 128,
  'nthreads': 1,
  'suffix': None,
@@ -632,7 +633,7 @@ class FitHelper(object):
         assert nwalkers_p == kwargs['nwalkers'], warning
         print("% Restarting from output {}.".format(fn))
         print("% Will augment {} samples/walker there with {} more (per walker).".format(
-            steps_p, kwargs['steps']))
+            steps_p, kwargs['checkpoint']))
 
         # Set initial walker positions
         pos = None

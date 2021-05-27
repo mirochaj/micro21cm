@@ -51,7 +51,7 @@ _priors_broad = \
 
 _guesses_broad = \
 {
- 'Ts': (5., 150.),
+ 'Ts': (10., 1000.),
  'Q': (0.2, 0.8),
  'R': (0.5, 10.),
  'sigma': (0.6, 1.5),
@@ -76,7 +76,9 @@ _guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl,
 _guesses_R_pl = {'p0': (1., 5.), 'p1': (-10., -20.)}
 _guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
-_guesses_T = {'broad': _guesses_broad['Ts']}
+_guesses_T_dpl = {'p0': (5., 15.), 'p1': (8, 20), 'p2': (1, 3),
+    'p3': (-2.5, -1.5)}
+_guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl}
 
 _guesses_s_pl = {'p0': (0.3, 0.6), 'p1': (-0.5, 0.5)}
 _guesses_s = {'pl': _guesses_s_pl, 'broad': _guesses_broad['sigma']}
@@ -97,7 +99,9 @@ _priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
 _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
 
 _priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
-_priors_T = {'broad': _priors_broad['Ts']}
+
+_priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 6), 'p3': (-6, 0)}
+_priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl}
 _priors_g = {'broad': _priors_broad['gamma']}
 
 _priors = {'Q': _priors_Q, 'R': _priors_R, 'sigma': _priors_s,
@@ -190,6 +194,19 @@ def broken_power_law(z, pars):
 def broken_power_law_max1(z, pars):
     return np.minimum(max_Q, broken_power_law(z, pars))
 
+
+zhigh = 20.
+def double_power_law(z, pars):
+    A, zpeak, alpha1, alpha2 = pars
+
+    normcorr = 1. / ((zhigh / zpeak)**-alpha1 \
+        + (zhigh / zpeak)**-alpha2)
+
+    dpl = normcorr * A \
+        * ((z / zpeak)**-alpha1 + (z / zpeak)**-alpha2)
+
+    return dpl
+
 def extract_params(all_pars, all_args, par):
     _args = []
     for j, _par_ in enumerate(all_pars):
@@ -199,7 +216,6 @@ def extract_params(all_pars, all_args, par):
         _args.append(all_args[j])
 
     return _args
-
 
 class FitHelper(object):
     def __init__(self, data=None, data_err_func=None, **kwargs):
@@ -425,6 +441,12 @@ class FitHelper(object):
         return self._func_Q
 
     @property
+    def func_T(self):
+        if not hasattr(self, '_func_T'):
+            self._func_T = self.get_func('Ts')
+        return self._func_T
+
+    @property
     def func_R(self):
         if not hasattr(self, '_func_R'):
             self._func_R = self.get_func('R')
@@ -448,12 +470,13 @@ class FitHelper(object):
         elif par == 'R':
             return self.func_R
         elif par == 'sigma':
-            return self.func_sigma
+            return self.func_s
         elif par == 'gamma':
             return self.func_gamma
+        elif par == 'Ts':
+            return self.func_T
         else:
             return None
-
 
     def get_func(self, par):
         name = par + '_func'
@@ -465,6 +488,8 @@ class FitHelper(object):
             func = lambda z, pars: power_law_max1(z, pars)
         elif self.kwargs[name] == 'bpl':
             func = lambda z, pars: broken_power_law_max1(z, pars)
+        elif self.kwargs[name] == 'dpl':
+            func = lambda z, pars: double_power_law(z, pars)
         else:
             raise NotImplemented('help')
 
@@ -538,7 +563,7 @@ class FitHelper(object):
             if is_func:
                 if func in ['pl', 'tanh']:
                     N += 2
-                elif func == 'bpl':
+                elif func in ['bpl', 'dpl']:
                     N += 4
             else:
                 N += self.fit_zindex.size
@@ -603,6 +628,11 @@ class FitHelper(object):
                 raise NotImplementedError('Unrecognized function {}'.format(
                     self.kwargs['Q_func']
                 ))
+
+        if self.func_T is not None:
+            assert self.kwargs['Ts_func'] == 'dpl'
+            param_z.extend([-np.inf]*4)
+            param_names.extend(['Ts_p0', 'Ts_p1', 'Ts_p2', 'Ts_p3'])
 
         if self.func_R is not None:
             assert self.kwargs['R_func'] == 'pl'
@@ -728,7 +758,7 @@ class FitHelper(object):
         for i, par in enumerate(model.params):
 
             if self.kwargs['{}_func'.format(par)] is not None:
-                _args = extract_params(allpars, args, 'Q')
+                _args = extract_params(allpars, args, par)
                 pars[par] = self.func(par)(z, _args)
 
             else:

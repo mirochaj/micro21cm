@@ -18,7 +18,8 @@ from matplotlib.cm import ScalarMappable
 from matplotlib.colors import LogNorm, Normalize
 from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
-    broken_power_law, broken_power_law_max1, extract_params
+    broken_power_law, broken_power_law_max1, double_power_law, \
+    extract_params
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
@@ -26,8 +27,8 @@ _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
 _default_labels = {'Q': r'$Q$', 'R': r'$R$', 'Ts': r'$T_S$',
     'sigma': r'$\sigma$', 'gamma': r'$\gamma$'}
-_default_limits = {'Q': (-0.05, 1.05), 'R': (0, 15), 'Ts': (0, 150),
-    'sigma': (0, 1), 'gamma': (-3, 3)}
+_default_limits = {'Q': (-0.05, 1.05), 'R': (0, 30), 'Ts': (0, 1e3),
+    'sigma': (0, 2), 'gamma': (-4, 1)}
 _default_z = np.arange(5, 20, 0.05)
 
 
@@ -419,8 +420,9 @@ class AnalyzeFit(object):
 
         return ax
 
-    def plot_zevol(self, par, use_best=False, conflevel=0.68, ax=None, fig=1,
-        burn=0, marker_kw={}, scatter=False, zoffset=0, **kwargs):
+    def plot_zevol(self, par, use_best=False, conflevel=0.68,
+        ax=None, fig=1, burn=0, marker_kw={}, scatter=False,
+        zoffset=0, **kwargs):
         """
         Plot constraints on model parameters vs. redshift.
         """
@@ -438,25 +440,25 @@ class AnalyzeFit(object):
             ibest = ibest[0]
 
         # First, deal with parametric results if we have them.
-        for _par_ in ['Q', 'R']:
+        for _par_ in ['Q', 'R', 'Ts']:
             if (par != _par_):
                 continue
 
-            if (self.data['kwargs']['{}_func'.format(_par_[0])] is None):
+            if (self.data['kwargs']['{}_func'.format(_par_)] is None):
                 continue
 
             j = 0
             p = []
             v = []
-            while '{}_p{}'.format(_par_[0], j) in params:
-                pj = params.index('{}_p{}'.format(_par_[0], j))
+            while '{}_p{}'.format(_par_, j) in params:
+                pj = params.index('{}_p{}'.format(_par_, j))
                 vj = chain[:,:,pj]
                 j += 1
 
                 p.append(pj)
                 v.append(vj)
 
-            fname = self.data['kwargs']['{}_func'.format(_par_[0])]
+            fname = self.data['kwargs']['{}_func'.format(_par_)]
 
             if fname == 'tanh':
                 func = tanh_generic
@@ -470,6 +472,9 @@ class AnalyzeFit(object):
                     func = broken_power_law_max1
                 else:
                     func = broken_power_law
+            elif fname == 'dpl':
+                assert _par_ == 'Ts'
+                func = double_power_law
             else:
                 raise NotImplemented('No option for {} yet'.format(fname))
 
@@ -481,7 +486,8 @@ class AnalyzeFit(object):
                 ybest = func(_default_z, pbest)
                 ax.plot(_default_z, ybest, **kwargs)
             else:
-                v_flat = [self.data['flatchain'][burn:,_p] for _p in p]
+                v_flat = [self.data['flatchain'][burn:,_p] \
+                    for _p in p]
                 _pars_ = np.array([element for element in v_flat])
 
                 if scatter:

@@ -14,14 +14,20 @@ import micro21cm
 import numpy as np
 import matplotlib.pyplot as pl
 
-model_logn = micro21cm.BubbleModel(bubbles_pdf='lognormal')
-model_plex = micro21cm.BubbleModel(bubbles_pdf='plexp')
+def test():
+    model_logn = micro21cm.BubbleModel(bubbles_pdf='lognormal')
+    model_plex = micro21cm.BubbleModel(bubbles_pdf='plexp')
 
-bsd_logn = model_logn.get_bsd(Q=0.1, sigma=0.5)
-bsd_plex = model_plex.get_bsd(Q=0.1, gamma=0.0)
+    bsd_logn = model_logn.get_bsd(Q=0.1, R=2., sigma=0.5)
+    bsd_plex = model_plex.get_bsd(Q=0.1, R=2., gamma=-3.5)
 
-fig, ax = pl.subplots(1, 1)
+    fig, ax = pl.subplots(1, 1)
 
-ax.loglog(model_logn.tab_R, bsd_log)
-ax.loglog(model_plex.tab_R, bsd_ple)
-ax.set_ylim(1e-8, 1e-1)
+    ax.loglog(model_logn.tab_R, bsd_logn * model_logn.tab_R**4)
+    ax.loglog(model_plex.tab_R, bsd_plex * model_plex.tab_R**4)
+    ax.set_ylim(1e-8, 1e-1)
+
+
+
+if __name__ == '__main__':
+    test()

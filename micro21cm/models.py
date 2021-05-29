@@ -16,8 +16,8 @@ from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz, quad
 from scipy.special import erfcinv, erf, erfc
-from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, CTfit, \
-    Tgadiabaticfit
+from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, \
+    CTfit, Tgadiabaticfit
 
 try:
     import powerbox as pbox
@@ -227,8 +227,8 @@ class BubbleModel(object):
 
         return self._matter_ps_.P(z, k)
 
-    def get_dTb_avg(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
-        n_b=None, Ts=np.inf):
+    def get_dTb_avg(self, z, Q=0.0, R=5., sigma=0.5, gamma=0.,
+        alpha=0., n_b=None, Ts=np.inf):
         """
         Return volume-averaged 21-cm brightness temperature, i.e., the
         global 21-cm signal.
@@ -914,8 +914,8 @@ class BubbleModel(object):
 
         return dTb**2 * cf_21
 
-    def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=0.5, gamma=0.,
-        alpha=0., n_b=None, delta_ion=0.):
+    def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
+        gamma=0., alpha=0., n_b=None, delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q < tiny_Q):
@@ -931,8 +931,9 @@ class BubbleModel(object):
             # In this case, if include_rsd==True, each term will carry
             # its own correction term, so we don't apply a correction
             # explicitly here as we do above in the Q=0 density-driven limit.
-            cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, n_b=n_b, delta_ion=delta_ion)
+            cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R=R,
+                sigma=sigma, gamma=gamma, alpha=alpha, n_b=n_b,
+                delta_ion=delta_ion)
 
             # Setup interpolant
             _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
@@ -942,8 +943,8 @@ class BubbleModel(object):
             if type(k) != np.ndarray:
                 k = np.array([k])
 
-            ps_21 = get_ps_from_cf(k, f_cf=f_cf, Rmin=self.tab_R.min(),
-                Rmax=self.tab_R.max())
+            ps_21 = get_ps_from_cf(k, f_cf=f_cf,
+                Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
         return ps_21
 

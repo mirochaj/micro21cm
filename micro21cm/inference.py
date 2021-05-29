@@ -76,7 +76,7 @@ _guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl,
 _guesses_R_pl = {'p0': (1., 5.), 'p1': (-10., -20.)}
 _guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
-_guesses_T_dpl = {'p0': (5., 15.), 'p1': (8, 20), 'p2': (1, 3),
+_guesses_T_dpl = {'p0': (5., 20.), 'p1': (8, 20), 'p2': (3, 7),
     'p3': (-2.5, -1.5)}
 _guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl}
 
@@ -100,7 +100,7 @@ _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
 
 _priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
 
-_priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 6), 'p3': (-6, 0)}
+_priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 8), 'p3': (-6, 0)}
 _priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl}
 _priors_g = {'broad': _priors_broad['gamma']}
 
@@ -485,9 +485,15 @@ class FitHelper(object):
         elif self.kwargs[name] == 'tanh':
             func = lambda z, pars: tanh_generic(z, pars)
         elif self.kwargs[name] == 'pl':
-            func = lambda z, pars: power_law_max1(z, pars)
+            if par == 'Q':
+                func = lambda z, pars: power_law_max1(z, pars)
+            else:
+                func = lambda z, pars: power_law(z, pars)
         elif self.kwargs[name] == 'bpl':
-            func = lambda z, pars: broken_power_law_max1(z, pars)
+            if par == 'Q':
+                func = lambda z, pars: broken_power_law_max1(z, pars)
+            else:
+                func = lambda z, pars: broken_power_law(z, pars)
         elif self.kwargs[name] == 'dpl':
             func = lambda z, pars: double_power_law(z, pars)
         else:

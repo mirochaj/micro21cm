@@ -34,6 +34,7 @@ realization of the 21-cm power spectrum using all default parameter values:
     import numpy as np
     import matplotlib.pyplot as pl
 
+    # Initialize an object that does the heavy lifting
     model = micro21cm.BubbleModel()
 
     # Set modes of interest

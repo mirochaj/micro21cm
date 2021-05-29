@@ -27,7 +27,7 @@ _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
 _default_labels = {'Q': r'$Q$', 'R': r'$R$', 'Ts': r'$T_S$',
     'sigma': r'$\sigma$', 'gamma': r'$\gamma$'}
-_default_limits = {'Q': (-0.05, 1.05), 'R': (0, 30), 'Ts': (0, 1e3),
+_default_limits = {'Q': (-0.05, 1.05), 'R': (0, 20), 'Ts': (0, 200),
     'sigma': (0, 2), 'gamma': (-4, 1)}
 _default_z = np.arange(5, 20, 0.05)
 
@@ -286,7 +286,8 @@ class AnalyzeFit(object):
 
         return axes
 
-    def plot_ps(self, z=None, use_best=True, ax=None, fig=1, conflevel=0.68,
+    def plot_ps(self, z=None, use_best=True, ax=None, fig=1,
+        conflevel=0.68, samples=None,
         marker_kw={}, use_cbar=True, show_cbar=True, show_data=True, cmap='jet',
         burn=0, **kwargs):
         """
@@ -322,8 +323,10 @@ class AnalyzeFit(object):
                 kwargs['color'] = cmap.to_rgba(_z_)
 
             if use_best:
-                ax.plot(data['kblobs'], data['blobs'][ibest[1], ibest[0],i],
-                    **kwargs)
+                ax.plot(data['kblobs'], data['blobs'][ibest[1],
+                    ibest[0],i], **kwargs)
+            elif samples is not None:
+                ax.plot(data['kblobs'], ps[-samples:].T, **kwargs)
             else:
                 _lo = (1. - conflevel) * 100 / 2.
                 _hi = 100 - _lo
@@ -422,10 +425,11 @@ class AnalyzeFit(object):
 
     def plot_zevol(self, par, use_best=False, conflevel=0.68,
         ax=None, fig=1, burn=0, marker_kw={}, scatter=False,
-        zoffset=0, **kwargs):
+        zoffset=0, samples=None, **kwargs):
         """
         Plot constraints on model parameters vs. redshift.
         """
+
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
 
@@ -480,7 +484,6 @@ class AnalyzeFit(object):
 
             pbest = [element[ibest[0],ibest[1]] for element in v]
 
-
             # Make Q(z) for each MCMC sample
             if use_best:
                 ybest = func(_default_z, pbest)
@@ -496,6 +499,9 @@ class AnalyzeFit(object):
                     zplot = _default_z
 
                 ybest = func(zplot, pbest)
+
+                assert burn < v[0].size, \
+                    "Provided `burn` exceeds size of chain!"
 
                 y = np.zeros((v[0].size-burn, _default_z.size))
                 for i, _z_ in enumerate(zplot):
@@ -513,6 +519,9 @@ class AnalyzeFit(object):
 
                         if 'label' in kw:
                             del kw['label']
+
+                elif samples is not None:
+                    ax.plot(zplot, y[-samples:,:].T, **kwargs)
                 else:
                     ax.fill_between(zplot, lo, hi, **kwargs)
 

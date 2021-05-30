@@ -415,11 +415,11 @@ class BubbleModel(object):
                 n_b=n_b)
 
         # Should cache bsd too.
-        _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, n_b=n_b)
+        _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
+            gamma=gamma, alpha=alpha, n_b=n_b)
 
-        # _bsd here is dn/dR, will multiple by R to obtain dn/dlnR before
-        # integrating over V(R)
+        # _bsd here is dn/dR, will multiple by R to obtain dn/dlnR
+        # before integrating over V(R)
         V = 4 * np.pi * self.tab_R**3 / 3.
         integ = _bsd * self.tab_R * V
         norm = 1. / integ.max()
@@ -434,6 +434,8 @@ class BubbleModel(object):
 
         # Normalize to provided ionized fraction
         bsd = _bsd * corr
+
+        self._cache_bsd_[(Q, R, sigma, gamma, alpha, n_b)] = bsd
 
         return bsd
 
@@ -659,8 +661,8 @@ class BubbleModel(object):
 
         return var
 
-    def get_density_threshold(self, z, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0,
-        n_b=None, **_kw_):
+    def get_density_threshold(self, z, Q=0.0, R=5., sigma=0.5,
+        gamma=0, alpha=0, n_b=None, **_kw_):
         """
         Use "volume matching" to determine density level above which
         gas is ionized.

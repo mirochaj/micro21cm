@@ -120,8 +120,15 @@ fit_kwargs = \
  'Ts_func': None,
  'sigma_func': None,
  'gamma_func': None,
- 'Q_monotonic': True,
- 'R_monotonic': True,
+
+ 'Q_val': None,
+ 'Ts_val': None,
+ 'R_val': None,
+ 'sigma_val': None,
+ 'gamma_val': None,
+
+ 'Q_monotonic': False,
+ 'R_monotonic': False,
  'Ts_monotonic': False,
  'sigma_monotonic': False,
  'gamma_monotonic': False,
@@ -257,15 +264,15 @@ class FitHelper(object):
         return self._fit_data
 
     def get_model_kwargs(self):
-        kw = {}
-        if self.kwargs['bubbles_ion']:
-            kw['bubbles_ion'] = True
-        else:
-            kw['bubbles_ion'] = False
-
-        kw['bubbles_pdf'] = self.kwargs['bubbles_pdf']
-        kw['include_rsd'] = self.kwargs['include_rsd']
-        kw['bubbles_Rfree'] = self.kwargs['Rfree']
+        kw = self.kwargs.copy()
+        #if self.kwargs['bubbles_ion']:
+        #    kw['bubbles_ion'] = True
+        #else:
+        #    kw['bubbles_ion'] = False
+#
+        #kw['bubbles_pdf'] = self.kwargs['bubbles_pdf']
+        #kw['include_rsd'] = self.kwargs['include_rsd']
+        #kw['bubbles_Rfree'] = self.kwargs['Rfree']
 
         return kw
 
@@ -564,6 +571,9 @@ class FitHelper(object):
     def nparams(self):
         N = 0
         for par in self.model.params:
+            if self.kwargs['{}_val'.format(par)] is not None:
+                continue
+
             func = self.kwargs['{}_func'.format(par)]
             is_func = func is not None
             if is_func:
@@ -615,7 +625,8 @@ class FitHelper(object):
             _z_ = self.get_z_from_index(iz)
 
             for j, par in enumerate(self.model.params):
-
+                if self.kwargs['{}_val'.format(par)] is not None:
+                    continue
                 if self.kwargs['{}_func'.format(par)] is not None:
                     continue
 
@@ -766,7 +777,8 @@ class FitHelper(object):
             if self.kwargs['{}_func'.format(par)] is not None:
                 _args = extract_params(allpars, args, par)
                 pars[par] = self.func(par)(z, _args)
-
+            elif self.kwargs['{}_val'.format(par)] is not None:
+                pars[par] = self.kwargs['{}_val'.format(par)]
             else:
 
                 pok = np.zeros(len(allpars))

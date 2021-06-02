@@ -27,7 +27,8 @@ _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
 _default_labels = {'Q': r'$Q$', 'R': r'$R$', 'Ts': r'$T_S$',
     'sigma': r'$\sigma$', 'gamma': r'$\gamma$'}
-_default_limits = {'Q': (-0.05, 1.05), 'R': (0, 20), 'Ts': (0, 200),
+_default_limits = {'Q': (-0.05, 1.05), 'R': (1e-1, 20),
+    'Ts': (1, 200),
     'sigma': (0, 2), 'gamma': (-4, 1)}
 _default_z = np.arange(5, 20, 0.05)
 
@@ -525,9 +526,13 @@ class AnalyzeFit(object):
                 else:
                     ax.fill_between(zplot, lo, hi, **kwargs)
 
+            if par in ['Ts', 'R']:
+                ax.set_yscale('log')
+
             ax.set_xlabel(r'$z$')
             ax.set_ylabel(_default_labels[_par_])
-            ax.set_xlim(5, 20)
+            ax.set_xlim(min(self.data['zfit'])-1,
+                max(self.data['zfit'])+1)
             ax.set_ylim(*_default_limits[_par_])
 
             return ax
@@ -560,10 +565,16 @@ class AnalyzeFit(object):
             ax.plot([z+zoffset]*2, [lo, hi], **kwargs)
             ax.scatter([z+zoffset]*2, [best]*2, **marker_kw)
 
+        if par in ['Ts', 'R']:
+            ax.set_yscale('log')
+
         ax.set_xlabel(r'$z$')
         ax.set_ylabel(_default_labels[par])
-        ax.set_xlim(5, 20)
+        ax.set_xlim(min(self.data['zfit'])-1,
+            max(self.data['zfit'])+1)
         ax.set_ylim(*_default_limits[par])
+
+
 
         return ax
 

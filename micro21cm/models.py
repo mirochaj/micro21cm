@@ -257,13 +257,13 @@ class BubbleModel(object):
                 self.NR)
         return self._tab_R
 
-    def _get_R_from_nb(self, Q=0.0, sigma=0.5, gamma=0., alpha=0., n_b=None,
-        Qtol=1e-6, maxiter=10000, **_kw_):
+    def _get_R_from_nb(self, Q=0.0, sigma=0.5, gamma=0., alpha=0.,
+        n_b=None, Qtol=1e-6, maxiter=10000, **_kw_):
         """
-        If self.bubbles_Rfree == False, it means the bubble abundance, n_b,
-        is our free parameter. In this case, we must iteratively solve for
-        the characteristic bubble size needed to guarantee that our BSD
-        integrates to Q.
+        If self.bubbles_Rfree == False, it means the bubble
+        abundance, n_b, is our free parameter. In this case, we
+        must iteratively solve for the characteristic bubble size
+        needed to guarantee that our BSD integrates to Q.
         """
         # Need to do this iteratively.
 
@@ -336,8 +336,8 @@ class BubbleModel(object):
 
         return self._cache_R[(Q, sigma, gamma, alpha, n_b, Qtol)]
 
-    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
-        alpha=0., n_b=None):
+    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5,
+        gamma=0., alpha=0., n_b=None):
         """
         Return an unnormalized version of the bubble size distribution.
 
@@ -365,7 +365,9 @@ class BubbleModel(object):
 
         return bsd
 
-    def _cache_bsd(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., n_b=None):
+    def _cache_bsd(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
+        alpha=0., n_b=None):
+
         if not hasattr(self, '_cache_bsd_'):
             self._cache_bsd_ = {}
 
@@ -406,13 +408,13 @@ class BubbleModel(object):
 
         """
 
-        cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha, n_b)
-        if cached_bsd is not None:
-            return cached_bsd
+        #cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha, n_b)
+        #if cached_bsd is not None:
+        #    return cached_bsd
 
         if not self.bubbles_Rfree:
-            R = self._get_R_from_nb(Q=Q, sigma=sigma, gamma=gamma, alpha=alpha,
-                n_b=n_b)
+            R = self._get_R_from_nb(Q=Q, sigma=sigma, gamma=gamma,
+                alpha=alpha, n_b=n_b)
 
         # Should cache bsd too.
         _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
@@ -435,27 +437,29 @@ class BubbleModel(object):
         # Normalize to provided ionized fraction
         bsd = _bsd * corr
 
-        self._cache_bsd_[(Q, R, sigma, gamma, alpha, n_b)] = bsd
+        #self._cache_bsd_[(Q, R, sigma, gamma, alpha, n_b)] = bsd
 
         return bsd
 
-    def get_bsd_cdf(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., n_b=None):
+    def get_bsd_cdf(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
+        alpha=0., n_b=None):
         """
         Compute the cumulative distribution function for the bubble size dist.
         """
 
-        pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b)
+        pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, n_b=n_b)
         cdf = cumtrapz(pdf * self.tab_R, x=np.log(self.tab_R), initial=0.0)
 
         return cdf / cdf[-1]
 
-    def get_nb(self, Q=0.0, R=5., sigma=0.5, gamma=0.0, alpha=0., n_b=None):
+    def get_nb(self, Q=0.0, R=5., sigma=0.5, gamma=0.0, alpha=0.,
+        n_b=None):
         """
         Compute the number density of bubbles [(h / Mpc)^3].
         """
-        pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b)
+        pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, n_b=n_b)
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
     def get_P1(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
@@ -464,8 +468,8 @@ class BubbleModel(object):
         Compute 1 bubble term.
         """
 
-        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b)
+        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, n_b=n_b)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
         if exclusion:
@@ -473,7 +477,8 @@ class BubbleModel(object):
             integ = np.trapz(bsd * (V - V_o) * self.tab_R,
                 x=np.log(self.tab_R))
         else:
-            integ = np.trapz(bsd * V_o * self.tab_R, x=np.log(self.tab_R))
+            integ = np.trapz(bsd * V_o * self.tab_R,
+                x=np.log(self.tab_R))
 
         if self.approx_small_Q:
             P1 = integ
@@ -496,16 +501,16 @@ class BubbleModel(object):
         if not self.approx_small_Q:
             return Q**2
 
-        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b)
+        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, n_b=n_b)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
         V = 4. * np.pi * self.tab_R**3 / 3.
 
         integ1 = np.trapz(bsd * (V - V_o) * self.tab_R,
             x=np.log(self.tab_R))
-        integ2 = np.trapz(bsd * (V - V_o) * (1. + xi_bb) * self.tab_R,
-            x=np.log(self.tab_R))
+        integ2 = np.trapz(bsd * (V - V_o) * (1. + xi_bb) *
+            self.tab_R, x=np.log(self.tab_R))
 
         if self.approx_small_Q:
             return integ1 * integ2

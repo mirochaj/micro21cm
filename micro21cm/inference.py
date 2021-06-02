@@ -55,7 +55,7 @@ _guesses_broad = \
  'Q': (0.2, 0.8),
  'R': (0.5, 10.),
  'sigma': (0.6, 1.5),
- 'gamma': (-4, -2),
+ 'gamma': (-3.8, -3),
 }
 
 _bins = \
@@ -69,16 +69,19 @@ _bins = \
 _guesses_Q_tanh = {'p0': (6, 10), 'p1': (1, 4)}
 _guesses_Q_bpl = {'p0': (0.25, 0.75), 'p1': (6, 10), 'p2': (-3, -1),
     'p3': (-4, -2)}
+_guesses_Q_pl = {'p0': (0.25, 0.75), 'p1': (-8, 0)}
 
 _guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl,
-    'broad': _guesses_broad['Q']}
+    'broad': _guesses_broad['Q'], 'pl': _guesses_Q_pl}
 
 _guesses_R_pl = {'p0': (1., 5.), 'p1': (-10., -20.)}
 _guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
 _guesses_T_dpl = {'p0': (5., 20.), 'p1': (8, 20), 'p2': (3, 7),
     'p3': (-2.5, -1.5)}
-_guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl}
+_guesses_T_pl = {'p0': (5., 50.), 'p1': (-8, -4)}
+_guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl,
+     'pl': _guesses_T_pl}
 
 _guesses_s_pl = {'p0': (0.3, 0.6), 'p1': (-0.5, 0.5)}
 _guesses_s = {'pl': _guesses_s_pl, 'broad': _guesses_broad['sigma']}
@@ -90,8 +93,9 @@ _guesses = {'R': _guesses_R, 'Q': _guesses_Q, 'Ts': _guesses_T,
 
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
 _priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
+_priors_Q_pl = {'p0': (0, 1), 'p1': (-10, 0)}
 _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl,
-    'broad': _priors_broad['Q']}
+    'broad': _priors_broad['Q'], 'pl': _priors_Q_pl}
 
 _priors_R_pl = {'p0': (0, 30), 'p1': (-25, -1)}
 _priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
@@ -101,7 +105,9 @@ _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
 _priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
 
 _priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 8), 'p3': (-6, 0)}
-_priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl}
+_priors_T_pl = {'p0': (0, 1000), 'p1': (-10, 0)}
+_priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl,
+    'pl': _priors_T_pl}
 _priors_g = {'broad': _priors_broad['gamma']}
 
 _priors = {'Q': _priors_Q, 'R': _priors_R, 'sigma': _priors_s,
@@ -115,6 +121,7 @@ fit_kwargs = \
  'prior_GP': False,
  'Qxdelta': False, # Otherwise, vary *increments* in Q.
  'Rxdelta': False, # Otherwise, vary *increments* in Q.
+
  'Q_func': None,
  'R_func': None,
  'Ts_func': None,
@@ -126,6 +133,12 @@ fit_kwargs = \
  'R_val': None,
  'sigma_val': None,
  'gamma_val': None,
+
+ 'Q_const': None,
+ 'Ts_const': None,
+ 'R_const': None,
+ 'sigma_const': None,
+ 'gamma_const': None,
 
  'Q_monotonic': False,
  'R_monotonic': False,
@@ -376,6 +389,13 @@ class FitHelper(object):
 
             if kwargs['sigma_func'] is not None:
                 prefix += '_s{}'.format(kwargs['sigma_func'])
+            elif kwargs['sigma_const'] is not None:
+                prefix += '_sconst'
+
+            if kwargs['gamma_func'] is not None:
+                prefix += '_g{}'.format(kwargs['gamma_func'])
+            elif kwargs['gamma_const'] is not None:
+                prefix += '_gconst'
 
             if kwargs['prior_tau']:
                 prefix += '_ptau'
@@ -574,6 +594,11 @@ class FitHelper(object):
             if self.kwargs['{}_val'.format(par)] is not None:
                 continue
 
+            # Parameter not allowed to evolve with redshift.
+            if self.kwargs['{}_const'.format(par)] is not None:
+                N += 1
+                continue
+
             func = self.kwargs['{}_func'.format(par)]
             is_func = func is not None
             if is_func:
@@ -630,6 +655,11 @@ class FitHelper(object):
                 if self.kwargs['{}_func'.format(par)] is not None:
                     continue
 
+                # If par is non-evolving, only add once
+                if self.kwargs['{}_const'.format(par)] is not None:
+                    if par in param_names:
+                        continue
+
                 param_z.append(_z_)
                 param_names.append(par)
 
@@ -647,9 +677,15 @@ class FitHelper(object):
                 ))
 
         if self.func_T is not None:
-            assert self.kwargs['Ts_func'] == 'dpl'
-            param_z.extend([-np.inf]*4)
-            param_names.extend(['Ts_p0', 'Ts_p1', 'Ts_p2', 'Ts_p3'])
+            assert self.kwargs['Ts_func'] in ['dpl', 'pl']
+
+            if self.kwargs['Ts_func'] == 'dpl':
+                param_z.extend([-np.inf]*4)
+                param_names.extend(['Ts_p0', 'Ts_p1', 'Ts_p2',
+                    'Ts_p3'])
+            elif self.kwargs['Ts_func'] == 'pl':
+                param_z.extend([-np.inf]*2)
+                param_names.extend(['Ts_p0', 'Ts_p1'])
 
         if self.func_R is not None:
             assert self.kwargs['R_func'] == 'pl'
@@ -779,6 +815,10 @@ class FitHelper(object):
                 pars[par] = self.func(par)(z, _args)
             elif self.kwargs['{}_val'.format(par)] is not None:
                 pars[par] = self.kwargs['{}_val'.format(par)]
+            elif self.kwargs['{}_const'.format(par)] is not None:
+                # gamma only at this point
+                j = allpars.index(par)
+                pars[par] = args[j]
             else:
 
                 pok = np.zeros(len(allpars))

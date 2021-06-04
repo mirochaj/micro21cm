@@ -140,6 +140,12 @@ fit_kwargs = \
  'sigma_const': None,
  'gamma_const': None,
 
+ 'Q_prior': None,
+ 'Ts_prior': None,
+ 'R_prior': None,
+ 'sigma_prior': None,
+ 'gamma_prior': None,
+
  'Q_monotonic': False,
  'R_monotonic': False,
  'Ts_monotonic': False,
@@ -571,6 +577,8 @@ class FitHelper(object):
 
             lo = R0 - 0.5 * dR
             hi = R0 + 0.5 * dR
+        elif self.kwargs['{}_prior'.format(par)] is not None:
+            lo, hi = self.kwargs['{}_prior'.format(par)]
         else:
             lo, hi = _guesses[par]['broad']
 
@@ -865,6 +873,8 @@ class FitHelper(object):
 
                 if par == 'Ts' and self.kwargs['Ts_log10']:
                     lo, hi = np.log10(_priors[par]['broad'])
+                elif self.kwargs['{}_prior'.format(par)] is not None:
+                    lo, hi = self.kwargs['{}_prior'.format(par)]
                 else:
                     lo, hi = _priors[par]['broad']
 

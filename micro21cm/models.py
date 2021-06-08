@@ -109,7 +109,7 @@ class BubbleModel(object):
 
         self.Rmin = Rmin
         self.Rmax = Rmax
-        self.NR = NR
+        self.NR = int(NR)
         self.bubbles = bubbles
         self.bubbles_ion = bubbles_ion
         self.bubbles_pdf = bubbles_pdf
@@ -649,20 +649,35 @@ class BubbleModel(object):
 
         return (bd/np.sqrt(bb*dd))
 
-    def get_variance_matter(self, z, R):
+    def get_variance_matter(self, z, R, kmin=1e-5, kmax=1e5, rtol=1e-5,
+        atol=1e-5):
         """
         Return the variance in the matter field at redshift `z` when
         smoothing on scale `R`.
         """
 
+        ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
+
         Pofk = lambda k: self.get_ps_matter(z, k)
         Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) \
             / (k * R)**3
 
-        integrand = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
+        integrand_full = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
             * 4. * np.pi * k**2 / (2. * np.pi)**3
 
-        var = quad(integrand, 0, np.inf, limit=100000)[0]
+        kcrit = 1. / R
+        norm = 1. / integrand_full(kmax)
+
+        integrand_1 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
+            * 3 / (k * R)**3 / (2. * np.pi)**3
+        integrand_2 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
+            * 3 * k * R / (k * R)**3 / (2. * np.pi)**3
+
+        var = quad(integrand_full, kmin, kcrit, **ikw)[0]
+        new = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R, **ikw)[0] \
+            - quad(integrand_2, kcrit, kmax, weight='cos', wvar=R, **ikw)[0]
+
+        var += new / norm
 
         return var
 

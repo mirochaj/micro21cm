@@ -12,6 +12,7 @@ Description:
 
 import camb
 import numpy as np
+from scipy.optimize import fmin
 from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz, quad
@@ -401,10 +402,10 @@ class BubbleModel(object):
             Typical bubble size [cMpc / h]. Note that this is the location of
             the peak in dn/dlnR!
         sigma : int, float
-            Another free parameter whose meaning depends on value of
-            `bubbles_pdf` attribute set in constructor. For default
-            `lognormal` BSD, this characterizes the width of the
-            distribution. For `plexp` this is the power-law slope (minus 3).
+            For `lognormal` BSD, this characterizes the width of the
+            distribution.
+        gamma : int, float
+            For `plexp` BSD this is the power-law slope.
 
         """
 
@@ -440,6 +441,37 @@ class BubbleModel(object):
         #self._cache_bsd_[(Q, R, sigma, gamma, alpha, n_b)] = bsd
 
         return bsd
+
+    def get_bsd_peak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0., n_b=None,
+        assume_dndlnR=True, **_kw_):
+        """
+        Return scale at which volume-weighted BSD peaks.
+
+        Parameters
+        ----------
+        assume_dndlnR : bool
+            If True, will return scale at dn/dlnR peaks. If False, will instead
+            return scale corresponding to peak in dn/dR.
+        """
+
+        if self.bubbles_pdf == 'lognormal':
+            if assume_dndlnR:
+                Rp = R * np.exp(3 * sigma**2)
+            else:
+                Rp = np.exp(np.log(R) - sigma**2)
+
+        elif self.bubbles_pdf in ['normal', 'gaussian']:
+            Rp = 0.
+        elif self.bubbles_pdf == 'plexp':
+            if assume_dndlnR:
+                Rp = R * (4. + gamma)
+            else:
+                Rp = R * (3. + gamma)
+        else:
+            raise NotImplemented("Unrecognized `bubbles_pdf`: {}".format(
+                self.bubbles_pdf))
+
+        return Rp
 
     def get_bsd_cdf(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
         alpha=0., n_b=None):
@@ -702,14 +734,21 @@ class BubbleModel(object):
             bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
                 n_b=n_b)
             # convert to dn/dlogR
-            bsd *= self.tab_R
+            bsd = bsd * self.tab_R
             # weight by volume
-            bsd *= 4. * np.pi * self.tab_R**3 / 3.
+            bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
             # Doesn't matter here but OK.
-            bsd /= Q
+            bsd = bsd / Q
             # find peak in V dn/dlnR
             Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 2:
+            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+                n_b=n_b)
+            # weight by volume
+            bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
+            # find peak in V dn/dR
+            Rsm = self.tab_R[np.argmax(bsd)]
+        elif self.use_volume_match == 3:
             Rsm = R
         elif self.use_volume_match == 10:
             bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,

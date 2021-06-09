@@ -44,7 +44,7 @@ _priors_broad = \
 {
  'Ts': (1e-2, 1000.),
  'Q': (0, 1),
- 'R': (0, 30),
+ 'R': (0, 100),
  'sigma': (0.05, 2),
  'gamma': (-5, 4),
 }
@@ -145,6 +145,8 @@ fit_kwargs = \
  'R_prior': None,
  'sigma_prior': None,
  'gamma_prior': None,
+
+ 'Rpeak_prior': _priors_broad['R'],
 
  'Q_monotonic': False,
  'R_monotonic': False,
@@ -890,6 +892,18 @@ class FitHelper(object):
                 continue
             if not np.all(np.diff(parevol[par]) < 0):
                 return -np.inf
+
+
+        # Check to make sure peak in R^3 * dn/dlnR is within prior too?
+        if self.kwargs['Rpeak_prior'] is not None:
+            lo, hi = _priors['R']['broad']
+            for z in self.fit_z:
+                pars_dict = self.get_param_dict(z, args)
+
+                Rp = self.model.get_bsd_peak(assume_dndlnR=True, **pars_dict)
+
+                if not (lo <= Rp <= hi):
+                    return -np.inf
 
         ##
         # Check for priors on Q(z=late in reionization)

@@ -54,7 +54,7 @@ _guesses_broad = \
  'Ts': (10., 1000.),
  'Q': (0.2, 0.8),
  'R': (0.5, 10.),
- 'sigma': (0.6, 1.5),
+ 'sigma': (0.6, 1.2),
  'gamma': (-3.8, -3),
 }
 
@@ -580,7 +580,11 @@ class FitHelper(object):
             lo = R0 - 0.5 * dR
             hi = R0 + 0.5 * dR
         elif self.kwargs['{}_prior'.format(par)] is not None:
-            lo, hi = self.kwargs['{}_prior'.format(par)]
+            lo1, hi1 = _guesses[par]['broad']
+            lo2, hi2 = self.kwargs['{}_prior'.format(par)]
+            # Use narrowest range
+            lo = max(lo1, lo2)
+            hi = min(hi1, hi2)
         else:
             lo, hi = _guesses[par]['broad']
 

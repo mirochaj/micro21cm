@@ -30,6 +30,7 @@ tiny_Q = 1e-3
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_Rfree=True,
+        bubbles_via_Rpeak=False,
         include_adiabatic_fluctuations=True, include_P1_corr=True,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
@@ -58,6 +59,12 @@ class BubbleModel(object):
             and are the avg and rms of radii for 'lognormal'. For 'plexp' R
             is the critical radius, and gamma is a power-law index for bubbles
             with radii < R.
+        bubbles_via_Rpeak : bool
+            By default, the parameter 'R' throughput refers to where the BSD
+            peaks, where BSD is dn/dR. To work in terms of the peak in the
+            volume-weighted BSD, R**3 * dn/dlnR, set bubbles_via_Rpeak=True.
+            Then, all R values supplied to class methods will be converted to
+            the scale where dn/dR peaks internally before calling get_bsd.
         bubbles_Rfree : bool
             If True, the characteristic bubble size, R, will be treated
             as the free parameter. This means that the bubble density will
@@ -114,6 +121,7 @@ class BubbleModel(object):
         self.bubbles = bubbles
         self.bubbles_ion = bubbles_ion
         self.bubbles_pdf = bubbles_pdf
+        self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.bubbles_Rfree = bubbles_Rfree
         self.use_pbar = use_pbar
         self.approx_small_Q = approx_small_Q
@@ -413,6 +421,13 @@ class BubbleModel(object):
         #if cached_bsd is not None:
         #    return cached_bsd
 
+        # In this case, assumes user input is actually peak in V dn/dlogR,
+        # convert to peak in dn/dR before calling _get_bsd_unnormalized
+        if self.bubbles_via_Rpeak:
+            _R = R * 1
+            R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                n_b=n_b)
+
         if not self.bubbles_Rfree:
             R = self._get_R_from_nb(Q=Q, sigma=sigma, gamma=gamma,
                 alpha=alpha, n_b=n_b)
@@ -442,8 +457,8 @@ class BubbleModel(object):
 
         return bsd
 
-    def get_bsd_peak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0., n_b=None,
-        assume_dndlnR=True, **_kw_):
+    def get_Rpeak_from_R(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
+        n_b=None, assume_dndlnR=True, **_kw_):
         """
         Return scale at which volume-weighted BSD peaks.
 
@@ -467,6 +482,37 @@ class BubbleModel(object):
                 Rp = R * (4. + gamma)
             else:
                 Rp = R * (3. + gamma)
+        else:
+            raise NotImplemented("Unrecognized `bubbles_pdf`: {}".format(
+                self.bubbles_pdf))
+
+        return Rp
+
+    def get_R_from_Rpeak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
+        n_b=None, assume_dndlnR=True, **_kw_):
+        """
+        Return scale at which volume-weighted BSD peaks.
+
+        Parameters
+        ----------
+        assume_dndlnR : bool
+            If True, will return scale at dn/dlnR peaks. If False, will instead
+            return scale corresponding to peak in dn/dR.
+        """
+
+        if self.bubbles_pdf == 'lognormal':
+            if assume_dndlnR:
+                Rp = R * np.exp(-3 * sigma**2)
+            else:
+                Rp = np.exp(np.log(R) + sigma**2)
+
+        elif self.bubbles_pdf in ['normal', 'gaussian']:
+            Rp = 0.
+        elif self.bubbles_pdf == 'plexp':
+            if assume_dndlnR:
+                Rp = R / (4. + gamma)
+            else:
+                Rp = R / (3. + gamma)
         else:
             raise NotImplemented("Unrecognized `bubbles_pdf`: {}".format(
                 self.bubbles_pdf))

@@ -30,7 +30,7 @@ tiny_Q = 1e-3
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_Rfree=True,
-        bubbles_via_Rpeak=False,
+        bubbles_via_Rpeak=True,
         include_adiabatic_fluctuations=True, include_P1_corr=True,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
@@ -457,6 +457,14 @@ class BubbleModel(object):
 
         return bsd
 
+    def get_Rpeak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
+        n_b=None, assume_dndlnR=True, **_kw_):
+        if self.bubbles_via_Rpeak:
+            return R
+        else:
+            return self.get_Rpeak_from_R(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                n_b=n_b, assume_dndlnR=assume_dndlnR)
+
     def get_Rpeak_from_R(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
         n_b=None, assume_dndlnR=True, **_kw_):
         """
@@ -566,7 +574,20 @@ class BubbleModel(object):
         if self.include_P1_corr and use_corr and (not exclusion):
             P1e = self.get_P1(d, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, n_b=n_b, exclusion=1, use_corr=False)
-            P1 *= (1. - P1e)
+            #P2 = self.get_P2(d, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            #    alpha=alpha, n_b=n_b)
+
+            if self.approx_small_Q:
+                _Q_ = Q
+            else:
+                _Q_ = 1. - np.exp(-Q)
+
+            # Average between two corrections we could use.
+            #corr = 0.5 * (_Q_ + P1e)
+            corr = np.sqrt(_Q_ * P1e)
+            #corr =
+
+            P1 *= (1. - corr)
 
         return P1
 
@@ -656,6 +677,9 @@ class BubbleModel(object):
         P1e = [self.get_P1(RR, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
             n_b=n_b, exclusion=1) for RR in self.tab_R]
         P1e = np.array(P1e)
+
+        #bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+        #    n_b=n_b)
 
         if separate:
             return P1e, (1. - Q)

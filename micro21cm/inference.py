@@ -275,8 +275,8 @@ class FitHelper(object):
                     perr = _data['errDeltasq21'][self.k_mask==0]
                     yerr = _noise + _a21 * ydat + perr
                 else:
-                    ydat = _data['Deltasq21']
-                    yerr = _data['errDeltasq21']
+                    ydat = _data['Deltasq21'][self.k_mask==0]
+                    yerr = _data['errDeltasq21'][self.k_mask==0]
 
                 data_to_fit.append([ydat, yerr])
 
@@ -904,7 +904,11 @@ class FitHelper(object):
             for z in self.fit_z:
                 pars_dict = self.get_param_dict(z, args)
 
-                Rp = self.model.get_bsd_peak(assume_dndlnR=True, **pars_dict)
+                if not model.bubbles_via_Rpeak:
+                    Rp = self.model.get_Rpeak_from_R(assume_dndlnR=True,
+                        **pars_dict)
+                else:
+                    Rp = pars_dict['R']
 
                 if not (lo <= Rp <= hi):
                     return -np.inf

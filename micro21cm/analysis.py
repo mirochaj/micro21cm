@@ -425,7 +425,7 @@ class AnalyzeFit(object):
         return ax
 
     def plot_zevol(self, par, use_best=False, conflevel=0.68,
-        ax=None, fig=1, burn=0, marker_kw={}, scatter=False,
+        ax=None, fig=1, burn=0, marker_kw={}, scatter=False, boxplot=False,
         zoffset=0, samples=None, **kwargs):
         """
         Plot constraints on model parameters vs. redshift.
@@ -494,7 +494,7 @@ class AnalyzeFit(object):
                     for _p in p]
                 _pars_ = np.array([element for element in v_flat])
 
-                if scatter:
+                if scatter or boxplot:
                     zplot = self.data['zfit']
                 else:
                     zplot = _default_z
@@ -512,7 +512,21 @@ class AnalyzeFit(object):
                 _hi = 100 - _lo
                 lo, hi = np.percentile(y, (_lo, _hi), axis=0)
 
-                if scatter:
+                if boxplot:
+                    kw = kwargs.copy()
+                    for i, _z_ in enumerate(zplot):
+                        conf = np.array([[0.16, 0.84]])
+                        data = y[:,i]#np.concatenate((y[:,i], ybest[i]))
+                        ax.boxplot(data, positions=[_z_], showfliers=False,
+                            manage_ticks=False,
+                            conf_intervals=conf)
+                            #usermedians=[ybest[i]])
+                            #conf_intervals=[[16, 84]])
+
+
+                        if 'label' in kw:
+                            del kw['label']
+                elif scatter:
                     kw = kwargs.copy()
                     for i, _z_ in enumerate(zplot):
                         ax.plot([_z_+zoffset]*2, [lo[i], hi[i]], **kw)

@@ -55,27 +55,27 @@ class AnalyzeFit(object):
             self._model = BubbleModel(**self.data['kwargs'])
         return self._model
 
-    def get_labels(self, pars):
-
-        params, redshifts = self.data['pinfo']
-
-        if type(pars[0]) == str:
-            pass
-        else:
-            _pars = [params[i] for i in pars]
-            pars = _pars
+    def get_labels(self, pars, redshifts=None):
 
         labels = []
 
-        for par in pars:
+        for i, par in enumerate(pars):
             if par in _default_labels:
-                labels.append(_default_labels[par])
+                if redshifts is not None:
+                    s = _default_labels[par]
+                    j = s.find('$')
+                    k = s.rfind('$')
+                    l = s[j+1:k]
+                    lab = r'$%s(z=%.2f)$' % (l, redshifts[i])
+                else:
+                    lab = _default_labels[par]
+                labels.append(lab)
             else:
                 labels.append(par)
 
         return labels
 
-    def plot_triangle(self, fig=1, axes=None, elements=None,
+    def plot_triangle(self, fig=1, axes=None, params=None, redshifts=None,
         complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
         fill=False, nu=[0.95, 0.68], take_log=False, is_log=False,
         skip=None, **kwargs):
@@ -91,11 +91,15 @@ class AnalyzeFit(object):
         else:
             axes_by_row = axes
 
-        if elements is None:
-            elements = np.arange(self.data['flatchain'].shape[-1])
+        if params is None:
+            params, redshifts = self.data['pinfo']
+        else:
+            pass
 
-        labels = self.get_labels(elements)
-        Np = len(elements)
+        elements = range(len(params))
+
+        labels = self.get_labels(params, redshifts)
+        Np = len(params)
 
         if type(bins) not in [list, tuple, np.ndarray]:
             bins = [bins] * Np
@@ -132,24 +136,35 @@ class AnalyzeFit(object):
                 else:
                     _ax = axes_by_row[i][j]
 
+                zsamplesi, samplesi = self.get_samples(params[i], burn)
+                zsamplesj, samplesj = self.get_samples(params[j], burn)
+
+                if zsamplesi.size > 1:
+                    iz = np.argmin(np.abs(redshifts[i] - zsamplesi))
+                    idata = samplesi[:,iz]
+                else:
+                    idata = samplesi[0,:]
+
+                if zsamplesj.size > 1:
+                    jz = np.argmin(np.abs(redshifts[j] - zsamplesj))
+                    jdata = samplesj[:,jz]
+                else:
+                    jdata = samplesj[0,:]
+
                 # Retrieve data to be used in plot
                 if not is_log[i]:
-                    p1 = 1. - flatchain[burn:,elements[i]] if complement[i] \
-                        else flatchain[burn:,elements[i]]
+                    p1 = 1. - idata if complement[i] else idata
                 else:
-                    p1 = 10**flatchain[burn:,elements[i]] if is_log[i] \
-                        else flatchain[burn:,elements[i]]
+                    p1 = 10**idata if is_log[i] else idata
 
                 if take_log[i]:
                     p1 = np.log10(p1)
 
                 # 2-D PDFs from here on
                 if not is_log[j]:
-                    p2 = 1. - flatchain[burn:,elements[j]] if complement[j] \
-                        else flatchain[burn:,elements[j]]
+                    p2 = 1. - jdata if complement[j] else jdata
                 else:
-                    p2 = 10**flatchain[burn:,elements[j]] if is_log[j] \
-                        else flatchain[burn:,elements[j]]
+                    p2 = 10**jdata if is_log[j] else jdata
 
                 if take_log[j]:
                     p2 = np.log10(p2)
@@ -385,8 +400,6 @@ class AnalyzeFit(object):
             fig, ax = pl.subplots(1, 1, num=fig)
             new_ax = True
 
-
-
         params, redshifts = self.data['pinfo']
 
         for _z_ in self.data['zfit']:
@@ -394,7 +407,6 @@ class AnalyzeFit(object):
             iT = None
             iQ = None
             for j, par in enumerate(params):
-
 
                 if (z is not None) and (_z_ != z):
                     continue
@@ -424,6 +436,85 @@ class AnalyzeFit(object):
 
         return ax
 
+    def get_samples(self, par, burn=0):
+
+        params, redshifts = self.data['pinfo']
+
+        chain = self.data['chain']
+        burn_per_w = burn // self.data['chain'].shape[0]
+
+        ##
+        # If par in `params`, it's easy.
+        if par in params:
+            z = []
+            y = []
+            for i, _z_ in enumerate(redshifts):
+                if params[i] != par:
+                    continue
+
+                z.append(_z_)
+                y.append(self.data['flatchain'][burn:,i])
+
+            return np.array(z), np.array(y)
+
+        # May be repeats -- just take first one
+        ibest = np.argwhere(self.data['lnprob'] == self.data['lnprob'].max())
+        if ibest.ndim == 2:
+            ibest = ibest[0]
+
+        # First, deal with parametric results if we have them.
+        for _par_ in ['Q', 'R', 'Ts']:
+            if (par != _par_):
+                continue
+
+            if (self.data['kwargs']['{}_func'.format(_par_)] is None):
+                continue
+
+            j = 0
+            p = []
+            v = []
+            while '{}_p{}'.format(_par_, j) in params:
+                pj = params.index('{}_p{}'.format(_par_, j))
+                vj = chain[:,:,pj]
+                j += 1
+
+                p.append(pj)
+                v.append(vj)
+
+            fname = self.data['kwargs']['{}_func'.format(_par_)]
+
+            if fname == 'tanh':
+                func = tanh_generic
+            elif fname == 'pl':
+                if _par_ == 'Q':
+                    func = power_law_max1
+                else:
+                    func = power_law
+            elif fname == 'bpl':
+                if _par_ == 'Q':
+                    func = broken_power_law_max1
+                else:
+                    func = broken_power_law
+            elif fname == 'dpl':
+                assert _par_ == 'Ts'
+                func = double_power_law
+            else:
+                raise NotImplemented('No option for {} yet'.format(fname))
+
+            # Make Q(z) (for example) for each MCMC sample
+            v_flat = [self.data['flatchain'][burn:,_p] for _p in p]
+            _pars_ = np.array([element for element in v_flat])
+            zplot = self.data['zfit']
+
+            assert burn < v[0].size, \
+                "Provided `burn` exceeds size of chain!"
+
+            y = np.zeros((v[0].size-burn, zplot.size))
+            for i, _z_ in enumerate(zplot):
+                y[:,i] = func(_z_, _pars_)
+
+            return np.array(zplot), y
+
     def plot_zevol(self, par, use_best=False, conflevel=0.68,
         ax=None, fig=1, burn=0, marker_kw={}, scatter=False, boxplot=False,
         zoffset=0, samples=None, **kwargs):
@@ -437,7 +528,6 @@ class AnalyzeFit(object):
         params, redshifts = self.data['pinfo']
 
         chain = self.data['chain']
-        burn_per_w = burn // self.data['chain'].shape[0]
 
         # May be repeats -- just take first one
         ibest = np.argwhere(self.data['lnprob'] == self.data['lnprob'].max())
@@ -507,6 +597,8 @@ class AnalyzeFit(object):
                 y = np.zeros((v[0].size-burn, _default_z.size))
                 for i, _z_ in enumerate(zplot):
                     y[:,i] = func(_z_, _pars_)
+
+                #zplot, y = self.get_samples
 
                 _lo = (1. - conflevel) * 100 / 2.
                 _hi = 100 - _lo

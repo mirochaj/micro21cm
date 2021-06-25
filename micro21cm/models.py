@@ -582,10 +582,11 @@ class BubbleModel(object):
             else:
                 _Q_ = 1. - np.exp(-Q)
 
-            # Average between two corrections we could use.
-            #corr = 0.5 * (_Q_ + P1e)
-            corr = np.sqrt(_Q_ * P1e)
-            #corr =
+            # Average between two corrections we could use or just use Q.
+            if self.include_P1_corr == 2:
+                corr = np.sqrt(_Q_ * P1e)
+            else:
+                corr = Q
 
             P1 *= (1. - corr)
 

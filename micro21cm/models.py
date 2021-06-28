@@ -423,14 +423,13 @@ class BubbleModel(object):
 
         # In this case, assumes user input is actually peak in V dn/dlogR,
         # convert to peak in dn/dR before calling _get_bsd_unnormalized
-        if self.bubbles_via_Rpeak:
-            _R = R * 1
-            R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma,
-                n_b=n_b)
-
         if not self.bubbles_Rfree:
             R = self._get_R_from_nb(Q=Q, sigma=sigma, gamma=gamma,
                 alpha=alpha, n_b=n_b)
+        elif self.bubbles_via_Rpeak:
+            _R = R * 1
+            R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                n_b=n_b)
 
         # Should cache bsd too.
         _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
@@ -1045,6 +1044,27 @@ class BubbleModel(object):
         cf_21 += bd + bbd + bdd + bbdd + bbd_1pt + bd_1pt
 
         return dTb**2 * cf_21
+
+    def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None):
+        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma)
+
+        cf_bb = bb - Q**2
+
+        # == 0 causes problems
+        cf_bb[cf_bb == 0] = 1e-16
+
+        # Setup interpolant
+        _fcf = interp1d(np.log(self.tab_R), cf_bb, kind='cubic',
+            bounds_error=False, fill_value=0.)
+        f_cf = lambda RR: _fcf.__call__(np.log(RR))
+
+        if type(k) != np.ndarray:
+            k = np.array([k])
+
+        ps_bb = get_ps_from_cf(k, f_cf=f_cf,
+            Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
+
+        return ps_bb
 
     def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
         gamma=0., alpha=0., n_b=None, delta_ion=0.):

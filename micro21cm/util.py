@@ -27,6 +27,7 @@ labels = \
  'cf21': r'$\xi_{21}(R)$',
  'delta_sq': r'$\overline{\delta T_b}^2 \Delta^2(k) \ [\mathrm{mK}^2]$',
  'delta_sq_long': r'$\overline{\delta T_b}^2 k^3 \left(\frac{P(k)}{2\pi^2}\right) \ [\mathrm{mK}^2]$',
+ 'delta_sq_xx': r'$\Delta_{xx}^2(k)$',
  'Ts': r'$T_S / \mathrm{K}$',
  'Q': r'$Q$',
  'Q_ion': r'$Q_{\mathrm{ion}}$',

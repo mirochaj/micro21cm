@@ -174,6 +174,9 @@ class AnalyzeFit(object):
                     kw = kwargs.copy()
                     if 'colors' in kw:
                         del kw['colors']
+                    if 'linestyles' in kw:
+                        del kw['linestyles']
+                        
                     _ax.hist(p2, density=True, bins=bins[j], histtype='step', **kw)
 
                     if j > 0:
@@ -325,10 +328,14 @@ class AnalyzeFit(object):
         ibest = np.argwhere(data['lnprob'] == data['lnprob'].max())[0]
         sh = data['blobs'].shape
 
+        #if len(sh) == 4:
         _ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2],sh[3]))
+        #else:
+        #    _ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2]))
+
         colors = 'k', 'b', 'm', 'c', 'y'
         for i in range(sh[2]):
-            ps = _ps[:,i,:]
+            ps = _ps[:,i]
             _z_ = self.data['zfit'][i]
 
             if z is not None:

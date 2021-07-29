@@ -31,7 +31,9 @@ class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_Rfree=True,
         bubbles_via_Rpeak=True,
-        include_adiabatic_fluctuations=True, include_P1_corr=True,
+        include_adiabatic_fluctuations=True,
+        include_P1=True, include_P2=True,
+        include_P1_corr=False, include_P2_corr=True,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e3, NR=1000,
@@ -126,6 +128,9 @@ class BubbleModel(object):
         self.use_pbar = use_pbar
         self.approx_small_Q = approx_small_Q
         self.include_P1_corr = include_P1_corr
+        self.include_P2_corr = include_P2_corr
+        self.include_P1 = include_P1
+        self.include_P2 = include_P2
         self.include_adiabatic_fluctuations = \
             include_adiabatic_fluctuations
         self.include_cross_terms = include_cross_terms
@@ -221,6 +226,10 @@ class BubbleModel(object):
             return -1
         else:
             return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
+
+    def get_ps_mm(self, z, k):
+        """ Just a wrapper around `get_ps_matter`. """
+        return self.get_ps_matter(z, k)
 
     def get_ps_matter(self, z, k):
         """
@@ -547,30 +556,20 @@ class BubbleModel(object):
             alpha=alpha, n_b=n_b)
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
-    def get_P1(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
+    def get_P1_corr(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
         n_b=None, exclusion=0, use_corr=True):
-        """
-        Compute 1 bubble term.
-        """
 
-        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, n_b=n_b)
-        V_o = self.get_overlap_vol(self.tab_R, d)
+        if not (self.include_P1_corr and use_corr):
+            return 1.
 
-        if exclusion:
-            V = 4. * np.pi * self.tab_R**3 / 3.
-            integ = np.trapz(bsd * (V - V_o) * self.tab_R,
-                x=np.log(self.tab_R))
+        if 0 < self.include_P1_corr < 1:
+            suppression = self.include_P1_corr
+        elif self.include_P1_corr % 1 != 0:
+            suppression = self.include_P1_corr % int(self.include_P1_corr)
         else:
-            integ = np.trapz(bsd * V_o * self.tab_R,
-                x=np.log(self.tab_R))
+            suppression = 1
 
-        if self.approx_small_Q:
-            P1 = integ
-        else:
-            P1 = 1. - np.exp(-integ)
-
-        if self.include_P1_corr and use_corr and (not exclusion):
+        if (not exclusion):
             P1e = self.get_P1(d, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, n_b=n_b, exclusion=1, use_corr=False)
             #P2 = self.get_P2(d, Q=Q, R=R, sigma=sigma, gamma=gamma,
@@ -582,14 +581,48 @@ class BubbleModel(object):
                 _Q_ = 1. - np.exp(-Q)
 
             # Average between two corrections we could use or just use Q.
-            if self.include_P1_corr == 2:
-                corr = np.sqrt(_Q_ * P1e)
+            if int(self.include_P1_corr) == 2:
+                corr = (1. - np.sqrt(_Q_ * P1e))
             else:
-                corr = Q
+                corr = (1. - Q)
+        else:
+            corr = 1.
 
-            P1 *= (1. - corr)
+        return corr * suppression
 
-        return P1
+    def get_P1(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
+        n_b=None, exclusion=0, use_corr=True):
+        """
+        Compute 1 bubble term.
+        """
+
+        if not self.include_P1:
+            return 0.0
+
+        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, n_b=n_b)
+        V_o = self.get_overlap_vol(self.tab_R, d)
+
+        if use_corr:
+            corr = self.get_P1_corr(self.tab_R, Q=Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha, n_b=n_b, use_corr=use_corr)
+        else:
+            corr = 1.
+
+        if exclusion:
+            V = 4. * np.pi * self.tab_R**3 / 3.
+            integ = np.trapz(bsd * (V - V_o) * self.tab_R,
+                x=np.log(self.tab_R))
+        else:
+            integ = np.trapz(bsd * V_o * corr * self.tab_R,
+                x=np.log(self.tab_R))
+
+        if self.approx_small_Q:
+            P1 = integ
+        else:
+            P1 = 1. - np.exp(-integ)
+
+        return P1 * corr
 
     def get_P2(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         n_b=None, xi_bb=0.):
@@ -597,7 +630,7 @@ class BubbleModel(object):
         Compute 2 bubble term.
         """
 
-        if not self.approx_small_Q:
+        if not self.include_P2:
             return Q**2
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
@@ -612,9 +645,11 @@ class BubbleModel(object):
             self.tab_R, x=np.log(self.tab_R))
 
         if self.approx_small_Q:
-            return integ1 * integ2
+            P2 = integ1 * integ2
         else:
-            return (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
+            P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
+
+        return P2
 
     def get_overlap_vol(self, R, d):
         """
@@ -640,7 +675,7 @@ class BubbleModel(object):
         return V_o
 
     def get_bb(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., n_b=None,
-        separate=False, **_kw_):
+        separate=False, xi_bb=None, **_kw_):
         """
         Comptute <bb'> following FZH04 model.
         """
@@ -652,6 +687,14 @@ class BubbleModel(object):
             name="<bb'>(z={})".format(z))
         pb.start()
 
+        if xi_bb is None:
+            xi_bb = np.zeros_like(self.tab_R)
+        elif type(xi_bb) != np.ndarray:
+            xi_bb = xi_bb * np.ones_like(self.tab_R)
+        else:
+            # Assumes it's the same for all bubbles
+            assert xi_bb.size == self.tab_R.size
+
         P1 = []
         P2 = []
         for i, RR in enumerate(self.tab_R):
@@ -659,17 +702,16 @@ class BubbleModel(object):
             P1.append(self.get_P1(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
                 gamma=gamma, n_b=n_b))
             P2.append(self.get_P2(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                gamma=gamma, n_b=n_b))
+                gamma=gamma, n_b=n_b, xi_bb=xi_bb[i]))
 
         pb.finish()
         P1 = np.array(P1)
         P2 = np.array(P2)
 
-        # Do we hit P1 with  (1. - Q)?
         if separate:
             return P1, P2
         else:
-            return P1 + (1. - P1) * P2
+            return P1 + (1 - P1) * P2
 
     def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., n_b=None,
         separate=False, **_kw_):
@@ -751,16 +793,95 @@ class BubbleModel(object):
 
         return (bd/np.sqrt(bb*dd))
 
-    def get_variance_matter(self, z, R, kmin=1e-5, kmax=1e5, rtol=1e-5,
+    def get_variance_mm(self, z, r, kmin=1e-5, kmax=1e5, rtol=1e-5,
         atol=1e-5):
         """
         Return the variance in the matter field at redshift `z` when
         smoothing on scale `R`.
         """
 
-        ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
+        #ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
 
         Pofk = lambda k: self.get_ps_matter(z, k)
+
+        var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
+            rtol=rtol, atol=atol)
+
+        #Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) \
+        #    / (k * R)**3
+#
+        #integrand_full = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
+        #    * 4. * np.pi * k**2 / (2. * np.pi)**3
+#
+        #kcrit = 1. / R
+        #norm = 1. / integrand_full(kmax)
+#
+        #integrand_1 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
+        #    * 3 / (k * R)**3 / (2. * np.pi)**3
+        #integrand_2 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
+        #    * 3 * k * R / (k * R)**3 / (2. * np.pi)**3
+#
+        #var = quad(integrand_full, kmin, kcrit, **ikw)[0]
+        #new = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R, **ikw)[0] \
+        #    - quad(integrand_2, kcrit, kmax, weight='cos', wvar=R, **ikw)[0]
+#
+        #var += new / norm
+
+        return var
+
+    def get_variance_bb(self, z, r, Q=0.5, R=5., sigma=0.5, gamma=None,
+        kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5, atol=1e-5):
+        """
+        Return the variance in the ionization field at redshift `z` when
+        smoothing on scale `R`.
+
+        .. note :: This is slow if we call the ionization power spectrum
+            directly, so we first setup an interpolant.
+        """
+
+        #ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
+
+        ps = lambda k: self.get_ps_bb(z, k, Q=Q, R=R, sigma=sigma,
+            gamma=gamma)
+
+        karr = 10**np.arange(np.log10(kmin), np.log10(kmax)+dlogk, dlogk)
+        tab_ps = ps(karr)
+
+        Pofk = interp1d(karr, tab_ps, kind='cubic', bounds_error=False,
+            fill_value=0.0)
+
+        var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
+            rtol=rtol, atol=atol)
+
+        return var
+
+    def get_variance_from_ps(self, ps, R, kmin=1e-5, kmax=1e5, rtol=1e-5,
+        atol=1e-5):
+        """
+        Compute variance of generic field from input power spectrum.
+
+        Parameters
+        ----------
+        ps : function
+            Input power spectrum, assumed to be function of k only.
+        R : int, float
+            Smoothing scale in [1/k] units.
+
+        Numerical Parameters
+        --------------------
+        kmin, kmax : float
+            Bounds in k-space to consider in integral.
+        atol, rtol: float
+            Absolute and relative tolerances for integration, respectively.
+
+        Returns
+        -------
+        Variance!
+
+        """
+        ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
+        Pofk = ps
+
         Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) \
             / (k * R)**3
 
@@ -835,7 +956,7 @@ class BubbleModel(object):
         else:
             raise NotImplemented('help')
 
-        var_R = self.get_variance_matter(z, R=Rsm)
+        var_R = self.get_variance_mm(z, r=Rsm)
         sig_R = np.sqrt(var_R)
 
         # Just changes meaning of what `x` and `w` are.
@@ -1014,10 +1135,10 @@ class BubbleModel(object):
         return beta_p, np.sqrt(beta_mu_sq)
 
     def get_cf_21cm(self, z, Q=0.0, Ts=np.inf, R=5., sigma=0.5, gamma=0.,
-        alpha=0., n_b=None, delta_ion=0.):
+        alpha=0., n_b=None, xi_bb=None, delta_ion=0.):
 
         bb = 1 * self.get_bb(z, Q, R=R, sigma=sigma, alpha=alpha, gamma=gamma,
-            n_b=n_b)
+            n_b=n_b, xi_bb=xi_bb)
         dd = 1 * self.get_dd(z)
         _alpha = self.get_alpha(z, Ts)
 
@@ -1045,8 +1166,8 @@ class BubbleModel(object):
 
         return dTb**2 * cf_21
 
-    def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None):
-        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma)
+    def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, xi_bb=None):
+        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, xi_bb=xi_bb)
 
         cf_bb = bb - Q**2
 
@@ -1067,7 +1188,7 @@ class BubbleModel(object):
         return ps_bb
 
     def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
-        gamma=0., alpha=0., n_b=None, delta_ion=0.):
+        gamma=0., alpha=0., n_b=None, xi_bb=None, delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q < tiny_Q):
@@ -1084,7 +1205,7 @@ class BubbleModel(object):
             # its own correction term, so we don't apply a correction
             # explicitly here as we do above in the Q=0 density-driven limit.
             cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R=R,
-                sigma=sigma, gamma=gamma, alpha=alpha, n_b=n_b,
+                sigma=sigma, gamma=gamma, alpha=alpha, n_b=n_b, xi_bb=xi_bb,
                 delta_ion=delta_ion)
 
             # Setup interpolant

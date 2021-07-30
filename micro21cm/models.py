@@ -29,8 +29,7 @@ tiny_Q = 1e-3
 
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
-        bubbles_pdf='lognormal', bubbles_Rfree=True,
-        bubbles_via_Rpeak=True,
+        bubbles_pdf='lognormal', bubbles_via_Rpeak=True,
         include_adiabatic_fluctuations=True,
         include_P1=True, include_P2=True,
         include_P1_corr=False, include_P2_corr=True,
@@ -68,12 +67,6 @@ class BubbleModel(object):
             volume-weighted BSD, R**3 * dn/dlnR, set bubbles_via_Rpeak=True.
             Then, all R values supplied to class methods will be converted to
             the scale where dn/dR peaks internally before calling get_bsd.
-        bubbles_Rfree : bool
-            If True, the characteristic bubble size, R, will be treated
-            as the free parameter. This means that the bubble density will
-            be determined automatically to obtain the requested Q. If False,
-            the bubble density, n_b, will be the free parameter, and R
-            will be determined iteratively to ensure the BSD integrates to Q.
         include_adiabatic_fluctuations : bool
             If True, inclue a correction factor that accounts for the fact
             that density and kinetic temperature are correlated. Uses
@@ -132,7 +125,6 @@ class BubbleModel(object):
         self.bubbles = bubbles
         self.bubbles_ion = bubbles_ion
         self.bubbles_via_Rpeak = bubbles_via_Rpeak
-        self.bubbles_Rfree = bubbles_Rfree
         self.use_pbar = use_pbar
         self.approx_small_Q = approx_small_Q
         self.include_P1_corr = include_P1_corr
@@ -150,10 +142,7 @@ class BubbleModel(object):
 
         self.params = ['Ts', 'Q']
         if self.bubbles:
-            if self.bubbles_Rfree:
-                self.params.append('R')
-            else:
-                self.params.append('n_b')
+            self.params.append('R')
 
             if self.bubbles_pdf == 'lognormal':
                 self.params.append('sigma')
@@ -256,7 +245,7 @@ class BubbleModel(object):
         return self._matter_ps_.P(z, k)
 
     def get_dTb_avg(self, z, Q=0.0, R=5., sigma=0.5, gamma=0.,
-        alpha=0., n_b=None, Ts=np.inf):
+        alpha=0., Ts=np.inf):
         """
         Return volume-averaged 21-cm brightness temperature, i.e., the
         global 21-cm signal.
@@ -267,7 +256,7 @@ class BubbleModel(object):
 
         """
         bd = self.get_bubble_density(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, n_b=n_b) * Q
+            alpha=alpha) * Q
         return self.get_dTb_bulk(z, Ts=Ts) * (1. - Q - bd)
 
     def get_dTb_bulk(self, z, Ts=np.inf):
@@ -288,13 +277,18 @@ class BubbleModel(object):
                     np.log10(self.Rmax), self.NR)
         return self._tab_R
 
-    def _get_R_from_nb(self, Q=0.0, sigma=0.5, gamma=0., alpha=0.,
-        n_b=None, Qtol=1e-6, maxiter=10000, **_kw_):
+    def _get_R_from_nb(self, n_b, Q=0.0, sigma=0.5, gamma=0., alpha=0.,
+        Qtol=1e-6, maxiter=10000, **_kw_):
         """
-        If self.bubbles_Rfree == False, it means the bubble
-        abundance, n_b, is our free parameter. In this case, we
-        must iteratively solve for the characteristic bubble size
-        needed to guarantee that our BSD integrates to Q.
+        Compute the characteristic bubble size needed to obtain the supplied
+        number density of bubbles, n_b.
+
+        .. note :: Used to have option self.bubbles_Rfree, which, if False,
+            would use n_b as the free parameter throughout, instead of R. This
+            functionality has since been retired (07.30.2021), but I've left
+            this routine in just in case it's useful to translate between
+            R and n_b.
+
         """
         # Need to do this iteratively.
 
@@ -320,7 +314,7 @@ class BubbleModel(object):
             logRhist.append(logR)
 
             _bsd = self._get_bsd_unnormalized(Q=Q, R=np.exp(logR),
-                sigma=sigma, gamma=gamma, alpha=alpha, n_b=n_b)
+                sigma=sigma, gamma=gamma, alpha=alpha)
 
             # Normalize bsd so we get requested `n_b`
             norm = n_b / np.trapz(_bsd * self.tab_R, x=np.log(self.tab_R))
@@ -367,8 +361,7 @@ class BubbleModel(object):
 
         return self._cache_R[(Q, sigma, gamma, alpha, n_b, Qtol)]
 
-    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5,
-        gamma=0., alpha=0., n_b=None):
+    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.):
         """
         Return an unnormalized version of the bubble size distribution.
 
@@ -400,20 +393,18 @@ class BubbleModel(object):
 
         return bsd
 
-    def _cache_bsd(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
-        alpha=0., n_b=None):
+    def _cache_bsd(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.):
 
         if not hasattr(self, '_cache_bsd_'):
             self._cache_bsd_ = {}
 
-        key = (Q, R, sigma, gamma, alpha, n_b)
+        key = (Q, R, sigma, gamma, alpha)
         if key in self._cache_bsd_:
             return self._cache_bsd_[key]
 
         return None
 
-    def get_bsd(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
-        n_b=None, **_kw_):
+    def get_bsd(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., **_kw_):
         """
         Compute the bubble size distribution (BSD).
 
@@ -443,7 +434,7 @@ class BubbleModel(object):
 
         """
 
-        #cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha, n_b)
+        #cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha)
         #if cached_bsd is not None:
         #    return cached_bsd
 
@@ -452,17 +443,13 @@ class BubbleModel(object):
         if self.bubbles_pdf == 'user':
             pass
         else:
-            if not self.bubbles_Rfree:
-                R = self._get_R_from_nb(Q=Q, sigma=sigma, gamma=gamma,
-                    alpha=alpha, n_b=n_b)
-            elif self.bubbles_via_Rpeak:
+            if self.bubbles_via_Rpeak:
                 _R = R * 1
-                R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma,
-                    n_b=n_b)
+                R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma)
 
         # Should cache bsd too.
         _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
-            gamma=gamma, alpha=alpha, n_b=n_b)
+            gamma=gamma, alpha=alpha)
 
         # _bsd here is dn/dR, will multiple by R to obtain dn/dlnR
         # before integrating over V(R)
@@ -481,20 +468,20 @@ class BubbleModel(object):
         # Normalize to provided ionized fraction
         bsd = _bsd * corr
 
-        #self._cache_bsd_[(Q, R, sigma, gamma, alpha, n_b)] = bsd
+        #self._cache_bsd_[(Q, R, sigma, gamma, alpha)] = bsd
 
         return bsd
 
     def get_Rpeak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
-        n_b=None, assume_dndlnR=True, **_kw_):
+        assume_dndlnR=True, **_kw_):
         if self.bubbles_via_Rpeak:
             return R
         else:
             return self.get_Rpeak_from_R(Q=Q, R=R, sigma=sigma, gamma=gamma,
-                n_b=n_b, assume_dndlnR=assume_dndlnR)
+                assume_dndlnR=assume_dndlnR)
 
     def get_Rpeak_from_R(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
-        n_b=None, assume_dndlnR=True, **_kw_):
+        assume_dndlnR=True, **_kw_):
         """
         Return scale at which volume-weighted BSD peaks.
 
@@ -525,7 +512,7 @@ class BubbleModel(object):
         return Rp
 
     def get_R_from_Rpeak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
-        n_b=None, assume_dndlnR=True, **_kw_):
+        assume_dndlnR=True, **_kw_):
         """
         Return scale at which volume-weighted BSD peaks.
 
@@ -555,29 +542,27 @@ class BubbleModel(object):
 
         return Rp
 
-    def get_bsd_cdf(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
-        alpha=0., n_b=None):
+    def get_bsd_cdf(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.):
         """
         Compute the cumulative distribution function for the bubble size dist.
         """
 
         pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, n_b=n_b)
+            alpha=alpha)
         cdf = cumtrapz(pdf * self.tab_R, x=np.log(self.tab_R), initial=0.0)
 
         return cdf / cdf[-1]
 
-    def get_nb(self, Q=0.0, R=5., sigma=0.5, gamma=0.0, alpha=0.,
-        n_b=None):
+    def get_nb(self, Q=0.0, R=5., sigma=0.5, gamma=0.0, alpha=0.):
         """
         Compute the number density of bubbles [(h / Mpc)^3].
         """
         pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, n_b=n_b)
+            alpha=alpha)
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
     def get_P1_corr(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
-        n_b=None, exclusion=0, use_corr=True):
+        exclusion=0, use_corr=True):
 
         if not (self.include_P1_corr and use_corr):
             return 1.
@@ -591,9 +576,9 @@ class BubbleModel(object):
 
         if (not exclusion):
             P1e = self.get_P1(d, Q=Q, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, n_b=n_b, exclusion=1, use_corr=False)
+                alpha=alpha, exclusion=1, use_corr=False)
             #P2 = self.get_P2(d, Q=Q, R=R, sigma=sigma, gamma=gamma,
-            #    alpha=alpha, n_b=n_b)
+            #    alpha=alpha)
 
             if self.approx_small_Q:
                 _Q_ = Q
@@ -611,7 +596,7 @@ class BubbleModel(object):
         return corr * suppression
 
     def get_P1(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
-        n_b=None, exclusion=0, use_corr=True):
+        exclusion=0, use_corr=True):
         """
         Compute 1 bubble term.
         """
@@ -620,12 +605,12 @@ class BubbleModel(object):
             return 0.0
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, n_b=n_b)
+            alpha=alpha)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
         if use_corr:
             corr = self.get_P1_corr(self.tab_R, Q=Q, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, n_b=n_b, use_corr=use_corr)
+                alpha=alpha, use_corr=use_corr)
         else:
             corr = 1.
 
@@ -644,8 +629,7 @@ class BubbleModel(object):
 
         return P1 * corr
 
-    def get_P2(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
-        n_b=None, xi_bb=0.):
+    def get_P2(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., xi_bb=0.):
         """
         Compute 2 bubble term.
         """
@@ -654,7 +638,7 @@ class BubbleModel(object):
             return Q**2
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, n_b=n_b)
+            alpha=alpha)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
         V = 4. * np.pi * self.tab_R**3 / 3.
@@ -694,7 +678,7 @@ class BubbleModel(object):
 
         return V_o
 
-    def get_bb(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., n_b=None,
+    def get_bb(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         separate=False, xi_bb=None, **_kw_):
         """
         Comptute <bb'> following FZH04 model.
@@ -752,9 +736,9 @@ class BubbleModel(object):
         for i, RR in enumerate(self.tab_R):
             pb.update(i)
             P1.append(self.get_P1(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                gamma=gamma, n_b=n_b))
+                gamma=gamma))
             P2.append(self.get_P2(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                gamma=gamma, n_b=n_b, xi_bb=xi_bb[i]))
+                gamma=gamma, xi_bb=xi_bb[i]))
 
         pb.finish()
         P1 = np.array(P1)
@@ -765,15 +749,14 @@ class BubbleModel(object):
         else:
             return P1 + (1 - P1) * P2
 
-    def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., n_b=None,
+    def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         separate=False, **_kw_):
 
         P1e = [self.get_P1(RR, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b, exclusion=1) for RR in self.tab_R]
+            exclusion=1) for RR in self.tab_R]
         P1e = np.array(P1e)
 
-        #bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-        #    n_b=n_b)
+        #bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
 
         if separate:
             return P1e, (1. - Q)
@@ -804,7 +787,7 @@ class BubbleModel(object):
         self._cache_dd_[z] = dd
         return dd
 
-    def get_bd(self, z, Q=0.0, R=5., sigma=0.5, alpha=0., n_b=None, bbar=1,
+    def get_bd(self, z, Q=0.0, R=5., sigma=0.5, alpha=0., bbar=1,
         bhbar=1, **_kw_):
         """
         Get the cross correlation function between bubbles and density,
@@ -831,18 +814,16 @@ class BubbleModel(object):
 
         return bd
 
-    def Rd(self, z, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0., n_b=None,
-        bbar=1, bhbar=1):
+    def Rd(self, z, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0., bbar=1, bhbar=1):
         """
         Normalize the cross correlation
 
         """
 
         bd = self.get_bd(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b, bbar=bbar, bhbar=bhbar)
+            bbar=bbar, bhbar=bhbar)
         dd = self.get_dd(z)
-        bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b)
+        bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
 
         return (bd/np.sqrt(bb*dd))
 
@@ -939,7 +920,7 @@ class BubbleModel(object):
         return var
 
     def get_density_threshold(self, z, Q=0.0, R=5., sigma=0.5,
-        gamma=0, alpha=0, n_b=None, **_kw_):
+        gamma=0, alpha=0, **_kw_):
         """
         Use "volume matching" to determine density level above which
         gas is ionized.
@@ -956,8 +937,7 @@ class BubbleModel(object):
             return -1, 0.0
 
         if self.use_volume_match == 1:
-            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-                n_b=n_b)
+            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
             # convert to dn/dlogR
             bsd = bsd * self.tab_R
             # weight by volume
@@ -967,8 +947,7 @@ class BubbleModel(object):
             # find peak in V dn/dlnR
             Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 2:
-            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-                n_b=n_b)
+            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
             # weight by volume
             bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
             # find peak in V dn/dR
@@ -977,13 +956,13 @@ class BubbleModel(object):
             Rsm = R
         elif self.use_volume_match == 10:
             bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, n_b=n_b, separate=True)
+                alpha=alpha, separate=True)
             bb = bb1 + bb2
             P1_frac = bb1 / bb
             Rsm = np.interp(0.75, P1_frac[-1::-1], self.tab_R[-1::-1])
         elif self.use_volume_match == 11:
             bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, n_b=n_b, separate=True)
+                alpha=alpha, separate=True)
             bb = bb1 + bb2
             P2_frac = bb2 / bb
             Rsm = np.interp(0.75, P2_frac, self.tab_R)
@@ -1007,7 +986,7 @@ class BubbleModel(object):
         return x_thresh, w
 
     def get_bubble_density(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0,
-        n_b=None, **_kw_):
+        **_kw_):
         """
         Return mean density in ionized regions.
         """
@@ -1017,7 +996,7 @@ class BubbleModel(object):
             return 0.0
 
         x_thresh, w = self.get_density_threshold(z, Q=Q, R=R,
-            sigma=sigma, gamma=gamma, alpha=alpha, n_b=n_b, **_kw_)
+            sigma=sigma, gamma=gamma, alpha=alpha, **_kw_)
 
         # Normalization factor
         norm = 0.5 * erfc(x_thresh / w / np.sqrt(2.))
@@ -1038,7 +1017,7 @@ class BubbleModel(object):
         return del_i / norm
 
     def get_cross_terms(self, z, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
-        gamma=0., alpha=0., n_b=None, beta=1., delta_ion=0., separate=False,
+        gamma=0., alpha=0., beta=1., delta_ion=0., separate=False,
         **_kw_):
         """
         Compute all terms that involve bubble field and density field.
@@ -1054,10 +1033,8 @@ class BubbleModel(object):
 
         """
 
-        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b)
-        bn = self.get_bn(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            n_b=n_b)
+        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+        bn = self.get_bn(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
         dd = self.get_dd(z)
         _alpha = self.get_alpha(z, Ts)
         #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
@@ -1068,7 +1045,7 @@ class BubbleModel(object):
             d_i = 0
         elif self.use_volume_match:
             d_i = self.get_bubble_density(z, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, n_b=n_b)
+                gamma=gamma, alpha=alpha)
         else:
             d_i = delta_ion
 
@@ -1169,10 +1146,10 @@ class BubbleModel(object):
         return beta_p, np.sqrt(beta_mu_sq)
 
     def get_cf_21cm(self, z, Q=0.0, Ts=np.inf, R=5., sigma=0.5, gamma=0.,
-        alpha=0., n_b=None, xi_bb=None, delta_ion=0.):
+        alpha=0., xi_bb=None, delta_ion=0.):
 
         bb = 1 * self.get_bb(z, Q, R=R, sigma=sigma, alpha=alpha, gamma=gamma,
-            n_b=n_b, xi_bb=xi_bb)
+            xi_bb=xi_bb)
         dd = 1 * self.get_dd(z)
         _alpha = self.get_alpha(z, Ts)
 
@@ -1190,7 +1167,7 @@ class BubbleModel(object):
 
         bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
             self.get_cross_terms(z, Q=Q, Ts=Ts, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, n_b=n_b, delta_ion=delta_ion, separate=True)
+                alpha=alpha, delta_ion=delta_ion, separate=True)
 
         bd *= (beta_mu + beta_phi)
         bdd *= (beta_mu + beta_phi)**2
@@ -1222,7 +1199,7 @@ class BubbleModel(object):
         return ps_bb
 
     def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
-        gamma=0., alpha=0., n_b=None, xi_bb=None, delta_ion=0.):
+        gamma=0., alpha=0., xi_bb=None, delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q < tiny_Q):
@@ -1230,7 +1207,7 @@ class BubbleModel(object):
             beta_phi, beta_mu = self.get_betas(z, Ts)
             beta_sq = (beta_mu + beta_phi)**2
             Tavg = self.get_dTb_avg(z, Q=Q, Ts=Ts, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, n_b=n_b)
+                gamma=gamma, alpha=alpha)
 
             ps_21 = Tavg**2 * ps_mm * beta_sq
 
@@ -1239,7 +1216,7 @@ class BubbleModel(object):
             # its own correction term, so we don't apply a correction
             # explicitly here as we do above in the Q=0 density-driven limit.
             cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R=R,
-                sigma=sigma, gamma=gamma, alpha=alpha, n_b=n_b, xi_bb=xi_bb,
+                sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb,
                 delta_ion=delta_ion)
 
             # Setup interpolant
@@ -1271,7 +1248,7 @@ class BubbleModel(object):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
     def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., n_b=None, beta=1., use_kdtree=True,
+        R=5., sigma=0.5, gamma=0., beta=1., use_kdtree=True,
         include_rho=True):
         """
         Make a 3-d realization representative of this model.
@@ -1301,9 +1278,9 @@ class BubbleModel(object):
         """
 
         Npix = int(Lbox / vox)
-        pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, n_b=n_b)
-        cdf = self.get_bsd_cdf(Q=Q, R=R, sigma=sigma, gamma=gamma, n_b=n_b)
-        num_per_vol = self.get_nb(Q=Q, R=R, sigma=sigma, gamma=gamma, n_b=n_b)
+        pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma)
+        cdf = self.get_bsd_cdf(Q=Q, R=R, sigma=sigma, gamma=gamma)
+        num_per_vol = self.get_nb(Q=Q, R=R, sigma=sigma, gamma=gamma)
 
         num = int(num_per_vol * Lbox**3)
 

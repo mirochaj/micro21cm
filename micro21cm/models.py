@@ -56,11 +56,12 @@ class BubbleModel(object):
             corresponds to full heating.
         bubbles_pdf : str
             Bubble size distribution. Will get normalized to volume-filling
-            fraction Q automatically. Current options: 'lognormal' and
-            'plexp'. The two parameters R and sigma characterize the PDF,
-            and are the avg and rms of radii for 'lognormal'. For 'plexp' R
-            is the critical radius, and gamma is a power-law index for bubbles
-            with radii < R.
+            fraction Q automatically. Current options: 'lognormal',
+            'plexp', or a user-defined option, which requires that the user supply
+            an array of radii and an unnormalized BSD as a tuple. The two parameters
+            R and sigma characterize the PDF, and are the avg and rms of radii for
+            'lognormal'. For 'plexp' R is the typical size, and gamma is a power-
+            law index for bubbles with radii < R.
         bubbles_via_Rpeak : bool
             By default, the parameter 'R' throughput refers to where the BSD
             peaks, where BSD is dn/dR. To work in terms of the peak in the
@@ -117,12 +118,19 @@ class BubbleModel(object):
 
         """
 
-        self.Rmin = Rmin
-        self.Rmax = Rmax
-        self.NR = int(NR)
+        # Check for user-defined BSD.
+        if type(bubbles_pdf) == str:
+            self.bubbles_pdf = bubbles_pdf
+            self.Rmin = Rmin
+            self.Rmax = Rmax
+            self.NR = int(NR)
+        else:
+            self._tab_user_R, self._tab_user_bsd = bubbles_pdf
+            assert self._tab_user_bsd.shape == self._tab_user_R.shape
+            self.bubbles_pdf = 'user'
+
         self.bubbles = bubbles
         self.bubbles_ion = bubbles_ion
-        self.bubbles_pdf = bubbles_pdf
         self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.bubbles_Rfree = bubbles_Rfree
         self.use_pbar = use_pbar
@@ -153,6 +161,8 @@ class BubbleModel(object):
                 self.params.extend(['sigma'])
             elif self.bubbles_pdf == 'plexp':
                 self.params.append('gamma')
+            elif self.bubbles_pdf == 'user':
+                pass
             else:
                 raise NotImplemented('Dunno BSD {}'.format(self.bubbles_pdf))
 
@@ -271,8 +281,11 @@ class BubbleModel(object):
     @property
     def tab_R(self):
         if not hasattr(self, '_tab_R'):
-            self._tab_R = np.logspace(np.log10(self.Rmin), np.log10(self.Rmax),
-                self.NR)
+            if self.bubbles_pdf == 'user':
+                self._tab_R = self._tab_user_R
+            else:
+                self._tab_R = np.logspace(np.log10(self.Rmin),
+                    np.log10(self.Rmax), self.NR)
         return self._tab_R
 
     def _get_R_from_nb(self, Q=0.0, sigma=0.5, gamma=0., alpha=0.,
@@ -363,6 +376,10 @@ class BubbleModel(object):
             self.tab_R to obtain the latter.
 
         """
+
+        if self.bubbles_pdf == 'user':
+            return self._tab_user_bsd
+
         logRarr = np.log(self.tab_R)
         logR = np.log(R)
         if self.bubbles_pdf == 'lognormal':
@@ -432,13 +449,16 @@ class BubbleModel(object):
 
         # In this case, assumes user input is actually peak in V dn/dlogR,
         # convert to peak in dn/dR before calling _get_bsd_unnormalized
-        if not self.bubbles_Rfree:
-            R = self._get_R_from_nb(Q=Q, sigma=sigma, gamma=gamma,
-                alpha=alpha, n_b=n_b)
-        elif self.bubbles_via_Rpeak:
-            _R = R * 1
-            R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma,
-                n_b=n_b)
+        if self.bubbles_pdf == 'user':
+            pass
+        else:
+            if not self.bubbles_Rfree:
+                R = self._get_R_from_nb(Q=Q, sigma=sigma, gamma=gamma,
+                    alpha=alpha, n_b=n_b)
+            elif self.bubbles_via_Rpeak:
+                _R = R * 1
+                R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                    n_b=n_b)
 
         # Should cache bsd too.
         _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
@@ -678,6 +698,38 @@ class BubbleModel(object):
         separate=False, xi_bb=None, **_kw_):
         """
         Comptute <bb'> following FZH04 model.
+
+        .. note :: By default, this is equivalent to the joint probability
+            that two points are ionized, often denoted <xx'>. If considering
+            heated bubbles, it is instead the probability that two points are
+            both heated.
+
+        Parameters
+        ----------
+        z : int, float
+            Redshift. Note that <bb'> doesn't actually depend on redshift, but
+            we keep it here for consistency with other methods. May change.
+
+        Parameters
+        ----------
+        Q : int, float
+            Fraction of volume filled by bubbles. Normalizes the BSD.
+        R : int, float
+            Typical bubble size [cMpc / h]. Note that this is the location of
+            the peak in dn/dlnR!
+        sigma : int, float
+            For `lognormal` BSD, this characterizes the width of the
+            distribution.
+        gamma : int, float
+            For `plexp` BSD this is the power-law slope.
+        xi_bb : int, float, np.ndarray
+            Excess probability that a second point is ionized given that the
+            first point is ionized.
+        separate : bool
+            If separate==True, will return one- and two-bubble terms separately
+            as a tuple (P1, P2). If separate==False, just returns the sum
+            of terms.
+
         """
 
         if Q == 0 or (not self.bubbles):
@@ -755,7 +807,8 @@ class BubbleModel(object):
     def get_bd(self, z, Q=0.0, R=5., sigma=0.5, alpha=0., n_b=None, bbar=1,
         bhbar=1, **_kw_):
         """
-        Get the cross correlation function between bubbles and density, equivalent to <bd'>.
+        Get the cross correlation function between bubbles and density,
+        equivalent to <bd'>.
         """
 
         dd = self.get_dd(z)
@@ -797,35 +850,13 @@ class BubbleModel(object):
         atol=1e-5):
         """
         Return the variance in the matter field at redshift `z` when
-        smoothing on scale `R`.
+        smoothing on scale `r`.
         """
-
-        #ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
 
         Pofk = lambda k: self.get_ps_matter(z, k)
 
         var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
             rtol=rtol, atol=atol)
-
-        #Wofk = lambda k: 3 * (np.sin(k * R) - k * R * np.cos(k * R)) \
-        #    / (k * R)**3
-#
-        #integrand_full = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
-        #    * 4. * np.pi * k**2 / (2. * np.pi)**3
-#
-        #kcrit = 1. / R
-        #norm = 1. / integrand_full(kmax)
-#
-        #integrand_1 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
-        #    * 3 / (k * R)**3 / (2. * np.pi)**3
-        #integrand_2 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
-        #    * 3 * k * R / (k * R)**3 / (2. * np.pi)**3
-#
-        #var = quad(integrand_full, kmin, kcrit, **ikw)[0]
-        #new = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R, **ikw)[0] \
-        #    - quad(integrand_2, kcrit, kmax, weight='cos', wvar=R, **ikw)[0]
-#
-        #var += new / norm
 
         return var
 
@@ -833,13 +864,15 @@ class BubbleModel(object):
         kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5, atol=1e-5):
         """
         Return the variance in the ionization field at redshift `z` when
-        smoothing on scale `R`.
+        smoothing on scale `r`.
 
         .. note :: This is slow if we call the ionization power spectrum
             directly, so we first setup an interpolant.
-        """
 
-        #ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
+        .. note :: Also, because cf_bb -> constant on small scales, this will
+            not work -- the integrals diverge. That must be meaningful...
+
+        """
 
         ps = lambda k: self.get_ps_bb(z, k, Q=Q, R=R, sigma=sigma,
             gamma=gamma)
@@ -879,6 +912,7 @@ class BubbleModel(object):
         Variance!
 
         """
+
         ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
         Pofk = ps
 

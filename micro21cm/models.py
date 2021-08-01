@@ -32,7 +32,7 @@ class BubbleModel(object):
         bubbles_pdf='lognormal', bubbles_via_Rpeak=True,
         include_adiabatic_fluctuations=True,
         include_P1=True, include_P2=True,
-        include_P1_corr=False, include_P2_corr=True,
+        include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e3, NR=1000,
@@ -129,6 +129,7 @@ class BubbleModel(object):
         self.approx_small_Q = approx_small_Q
         self.include_P1_corr = include_P1_corr
         self.include_P2_corr = include_P2_corr
+        self.include_overlap_corr = include_overlap_corr
         self.include_P1 = include_P1
         self.include_P2 = include_P2
         self.include_adiabatic_fluctuations = \
@@ -561,16 +562,13 @@ class BubbleModel(object):
             alpha=alpha)
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
-    def get_P1_corr(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
-        exclusion=0, use_corr=True):
+    def get_overlap_corr(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
+        exclusion=0, method=0, which_vol='o'):
 
-        if not (self.include_P1_corr and use_corr):
-            return 1.
-
-        if 0 < self.include_P1_corr < 1:
-            suppression = self.include_P1_corr
-        elif self.include_P1_corr % 1 != 0:
-            suppression = self.include_P1_corr % int(self.include_P1_corr)
+        if 0 < method < 1:
+            suppression = method
+        elif method % 1 != 0:
+            suppression = method % int(method)
         else:
             suppression = 1
 
@@ -586,14 +584,69 @@ class BubbleModel(object):
                 _Q_ = 1. - np.exp(-Q)
 
             # Average between two corrections we could use or just use Q.
-            if int(self.include_P1_corr) == 2:
-                corr = (1. - np.sqrt(_Q_ * P1e))
-            else:
+            if int(method) == 1:
                 corr = (1. - Q)
+            elif int(method) == 2:
+                corr = (1. - np.sqrt(_Q_ * P1e))
+            elif int(method) >= 3:
+                Qrelevant = self.get_intersectional_vol(d, Q=Q, R=R, sigma=sigma,
+                    gamma=gamma, alpha=alpha, which_vol=which_vol)
+
+                if method == 3:
+                    corr = np.exp(-np.minimum(Qrelevant, Q))
+                elif method == 4:
+                    corr = 1. - np.minimum(Qrelevant, Q)
+                elif method == 5:
+                    Qtot = self.get_Qtot(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                        alpha=alpha)
+                    corr = np.exp(-np.minimum(Qrelevant, Q)/Qtot)
+                elif method == 6:
+                    corr = np.exp(-Q)
+                else:
+                    raise NotImplemented('help')
+            else:
+                raise NotImplemented('help')
+
         else:
             corr = 1.
 
-        return corr * suppression
+        return np.minimum(corr, 1.) * suppression
+
+    def get_intersectional_vol(self, d, Q=0., R=5., sigma=0.5, gamma=0.,
+        alpha=0., which_vol='o', **_kw_):
+
+        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+
+        V_R = 4. * np.pi * self.tab_R**3 / 3.
+        V_o = self.get_overlap_vol(self.tab_R, d)
+
+        if which_vol == 'o':
+            V = V_o
+        elif which_vol == 'x':
+            V = V_R - V_o
+        elif which_vol == 'tot':
+            V = V_R
+
+        integ1 = np.trapz(bsd * V * self.tab_R, x=np.log(self.tab_R))
+        integ2 = np.trapz(bsd * V * self.tab_R, x=np.log(self.tab_R))
+
+        #Pdub = (1. - np.exp(-integ1))**2 * np.exp(-integ1) / 2.
+
+        return integ1 - (1. - np.exp(-integ2))
+
+    def get_Qint(d, Q=0., R=5., sigma=0.5, gamma=0.,
+        alpha=0., which_vol='o', **_kw_):
+        return self.get_intersectional_vol(d, Q=Q, R=R, sigma=sigma,
+            gamma=gamma, alpha=alpha, which_vol=which_vol, **_kw_)
+
+    def get_Qtot(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0):
+        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+
+        V = 4. * np.pi * self.tab_R**3 / 3.
+        integ = np.trapz(bsd * V * self.tab_R, x=np.log(self.tab_R))
+        return integ
 
     def get_P1(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
         exclusion=0, use_corr=True):
@@ -608,18 +661,12 @@ class BubbleModel(object):
             alpha=alpha)
         V_o = self.get_overlap_vol(self.tab_R, d)
 
-        if use_corr:
-            corr = self.get_P1_corr(self.tab_R, Q=Q, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, use_corr=use_corr)
-        else:
-            corr = 1.
-
         if exclusion:
             V = 4. * np.pi * self.tab_R**3 / 3.
             integ = np.trapz(bsd * (V - V_o) * self.tab_R,
                 x=np.log(self.tab_R))
         else:
-            integ = np.trapz(bsd * V_o * corr * self.tab_R,
+            integ = np.trapz(bsd * V_o * self.tab_R,
                 x=np.log(self.tab_R))
 
         if self.approx_small_Q:
@@ -627,9 +674,17 @@ class BubbleModel(object):
         else:
             P1 = 1. - np.exp(-integ)
 
+        if use_corr and self.include_P1_corr:
+            corr = self.get_overlap_corr(d, Q=Q, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha, method=self.include_P1_corr,
+                which_vol='tot')
+        else:
+            corr = 1.
+
         return P1 * corr
 
-    def get_P2(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., xi_bb=0.):
+    def get_P2(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., xi_bb=0.,
+        use_corr=True):
         """
         Compute 2 bubble term.
         """
@@ -653,7 +708,15 @@ class BubbleModel(object):
         else:
             P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
 
-        return P2
+        if use_corr and self.include_P2_corr:
+            corr = self.get_overlap_corr(d, Q=Q, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha, method=self.include_P2_corr,
+                which_vol='x')
+
+        else:
+            corr = 1.
+
+        return P2 * corr
 
     def get_overlap_vol(self, R, d):
         """
@@ -747,7 +810,7 @@ class BubbleModel(object):
         if separate:
             return P1, P2
         else:
-            return P1 + (1 - P1) * P2
+            return P1 + (1-P1) * P2
 
     def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         separate=False, **_kw_):
@@ -1157,6 +1220,16 @@ class BubbleModel(object):
 
         avg_term = _alpha**2 * Q**2
 
+        if self.include_overlap_corr:
+            corr = self.get_overlap_corr(0.0, Q=Q, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha, method=self.include_overlap_corr,
+                which_vol='tot')
+        else:
+            corr = 1.
+
+        bb *= corr
+        avg_term *= corr
+
         # Include correlations in density and temperature caused by
         # adiabatic expansion/contraction.
         beta_phi, beta_mu = self.get_betas(z, Ts)
@@ -1177,10 +1250,20 @@ class BubbleModel(object):
 
         return dTb**2 * cf_21
 
-    def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, xi_bb=None):
-        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, xi_bb=xi_bb)
+    def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
+        xi_bb=None):
 
-        cf_bb = bb - Q**2
+        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+            xi_bb=xi_bb)
+
+        if self.include_overlap_corr:
+            corr = self.get_overlap_corr(0.0, Q=Q, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha, method=self.include_overlap_corr,
+                which_vol='tot')
+        else:
+            corr = 1.
+
+        cf_bb = (bb - Q**2) * corr
 
         # == 0 causes problems
         cf_bb[cf_bb == 0] = 1e-16

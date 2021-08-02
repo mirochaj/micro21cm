@@ -26,6 +26,7 @@ except ImportError:
     pass
 
 tiny_Q = 1e-3
+tiny_cf = 1e-16
 
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
@@ -599,9 +600,14 @@ class BubbleModel(object):
                 elif method == 5:
                     Qtot = self.get_Qtot(Q=Q, R=R, sigma=sigma, gamma=gamma,
                         alpha=alpha)
-                    corr = np.exp(-np.minimum(Qrelevant, Q)/Qtot)
+                    #corr = np.exp(-np.minimum(Qrelevant, Q)/Qtot)
+                    corr = np.exp(-Qrelevant/Qtot)
                 elif method == 6:
                     corr = np.exp(-Q)
+                elif method == 7:
+                    Qtot = self.get_Qtot(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                        alpha=alpha)
+                    corr = np.exp(-np.minimum(Qrelevant, Q)/Q)
                 else:
                     raise NotImplemented('help')
             else:
@@ -890,8 +896,7 @@ class BubbleModel(object):
 
         return (bd/np.sqrt(bb*dd))
 
-    def get_variance_mm(self, z, r, kmin=1e-5, kmax=1e5, rtol=1e-5,
-        atol=1e-5):
+    def get_variance_mm(self, z, r, kmin=1e-5, kmax=1e5, rtol=1e-5, atol=1e-5):
         """
         Return the variance in the matter field at redshift `z` when
         smoothing on scale `r`.
@@ -933,7 +938,7 @@ class BubbleModel(object):
         return var
 
     def get_variance_from_ps(self, ps, R, kmin=1e-5, kmax=1e5, rtol=1e-5,
-        atol=1e-5):
+        atol=1e-2):
         """
         Compute variance of generic field from input power spectrum.
 
@@ -966,8 +971,9 @@ class BubbleModel(object):
         integrand_full = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
             * 4. * np.pi * k**2 / (2. * np.pi)**3
 
+
         kcrit = 1. / R
-        norm = 1. / integrand_full(kmax)
+        norm = 1. / integrand_full(kcrit)
 
         integrand_1 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
             * 3 / (k * R)**3 / (2. * np.pi)**3
@@ -975,8 +981,10 @@ class BubbleModel(object):
             * 3 * k * R / (k * R)**3 / (2. * np.pi)**3
 
         var = quad(integrand_full, kmin, kcrit, **ikw)[0]
-        new = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R, **ikw)[0] \
-            - quad(integrand_2, kcrit, kmax, weight='cos', wvar=R, **ikw)[0]
+
+        first_bit = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R, **ikw)
+        second_bit = quad(integrand_2, kcrit, kmax, weight='cos', wvar=R, **ikw)
+        new = first_bit[0] - second_bit[0]
 
         var += new / norm
 
@@ -1266,11 +1274,11 @@ class BubbleModel(object):
         cf_bb = (bb - Q**2) * corr
 
         # == 0 causes problems
-        cf_bb[cf_bb == 0] = 1e-16
+        cf_bb[cf_bb == 0] = tiny_cf
 
         # Setup interpolant
         _fcf = interp1d(np.log(self.tab_R), cf_bb, kind='cubic',
-            bounds_error=False, fill_value=0.)
+            bounds_error=False, fill_value=tiny_cf)
         f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
         if type(k) != np.ndarray:

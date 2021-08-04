@@ -12,6 +12,8 @@ Description:
 
 import numpy as np
 from scipy.integrate import quad
+from scipy.fft import fftn as scipy_fftn
+from scipy.fft import ifftn as scipy_ifftn
 
 try:
     import progressbar
@@ -92,6 +94,42 @@ def get_ps_from_cf(k, f_cf, Rmin=1e-2, Rmax=1e3, rtol=1e-5, atol=1e-5):
 
     return ps
 
+def get_filter(box, R=10, kernel='tophat'):
+    _fil_ = np.zeros_like(box)
+    if kernel == 'tophat':
+        dim = box.shape[0]
+        # Bin edges
+        _xe = _ye = _ze = np.arange(0, dim+1, 1)
+        _xc = _yc = _zc = bin_e2c(_xe)
+
+        _xx, _yy, _zz = np.meshgrid(_xc, _yc, _zc, indexing="ij")
+
+        x0 = y0 = z0 = int(0.5 * dim)
+
+        _RR = np.sqrt((_xx - x0)**2 + (_yy - y0)**2 + (_zz - z0)**2)
+
+        ok = np.abs(_RR) < R
+
+        _fil_[ok==1] = 1. / float(ok.sum())
+
+    else:
+        raise NotImplemented('help')
+
+    return _fil_
+
+def smooth_box(box, R=2, kernel='tophat', periodic=False):
+    """
+    Smooth a box with some kernel.
+    """
+
+    ##
+    # Setup smoothing filter first
+    _fil_ = get_filter(box, R=R, kernel=kernel)
+
+    _box = scipy_fftn(box)
+    _fil = scipy_fftn(_fil_)
+
+    return scipy_ifftn(_box * _fil)
 
 class ProgressBar(object):
     def __init__(self, maxval, name='micro21cm', use=True, width=80):

@@ -1,3 +1,4 @@
+from .box import Box
 from .models import BubbleModel
 from .analysis import AnalyzeFit
 from .inference import FitHelper

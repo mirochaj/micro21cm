@@ -13,17 +13,11 @@ Description:
 import camb
 import numpy as np
 from scipy.optimize import fmin
-from scipy.spatial import cKDTree
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz, quad
 from scipy.special import erfcinv, erf, erfc
 from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, \
     CTfit, Tgadiabaticfit
-
-try:
-    import powerbox as pbox
-except ImportError:
-    pass
 
 tiny_Q = 1e-3
 tiny_cf = 1e-16
@@ -641,8 +635,8 @@ class BubbleModel(object):
 
         return integ1 - (1. - np.exp(-integ2))
 
-    def get_Qint(d, Q=0., R=5., sigma=0.5, gamma=0.,
-        alpha=0., which_vol='o', **_kw_):
+    def get_Qint(self, d, Q=0., R=5., sigma=0.5, gamma=0.,
+        alpha=0., which_vol='tot', **_kw_):
         return self.get_intersectional_vol(d, Q=Q, R=R, sigma=sigma,
             gamma=gamma, alpha=alpha, which_vol=which_vol, **_kw_)
 
@@ -896,35 +890,33 @@ class BubbleModel(object):
 
         return (bd/np.sqrt(bb*dd))
 
-    def get_variance_mm(self, z, r, kmin=1e-5, kmax=1e5, rtol=1e-5, atol=1e-5):
+    def get_variance(self, z, r, field, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
+        gamma=0., alpha=0., xi_bb=None, kmin=1e-5, kmax=1e5, dlogk=0.05,
+        rtol=1e-5, atol=1e-5):
         """
-        Return the variance in the matter field at redshift `z` when
-        smoothing on scale `r`.
-        """
-
-        Pofk = lambda k: self.get_ps_matter(z, k)
-
-        var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
-            rtol=rtol, atol=atol)
-
-        return var
-
-    def get_variance_bb(self, z, r, Q=0.5, R=5., sigma=0.5, gamma=None,
-        kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5, atol=1e-5):
-        """
-        Return the variance in the ionization field at redshift `z` when
-        smoothing on scale `r`.
-
-        .. note :: This is slow if we call the ionization power spectrum
-            directly, so we first setup an interpolant.
-
-        .. note :: Also, because cf_bb -> constant on small scales, this will
-            not work -- the integrals diverge. That must be meaningful...
-
+        Compute the variance of some `field`.
         """
 
-        ps = lambda k: self.get_ps_bb(z, k, Q=Q, R=R, sigma=sigma,
-            gamma=gamma)
+        # CAMB already sets of an interpolant for the matter PS, so
+        # we can skip straight to integrating over window function.
+        if field in ['matter', 'm', 'mm', 'dd', 'density']:
+            Pofk = lambda k: self.get_ps_matter(z, k)
+
+            var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
+                rtol=rtol, atol=atol)
+
+            return var
+
+        ##
+        # Other fields require us to make the interpolant ourselves.
+        if field in ['bb', 'bubbles', 'ionization', 'xx', 'x',  'ion']:
+            ps = lambda k: self.get_ps_bb(z, k, Q=Q, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha)
+        elif field in ['21cm']:
+            ps = lambda k: self.get_ps_21cm(z, k, Q=Q, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha, Ts=Ts)
+        else:
+            raise NotImplemented('help')
 
         karr = 10**np.arange(np.log10(kmin), np.log10(kmax)+dlogk, dlogk)
         tab_ps = ps(karr)
@@ -936,6 +928,38 @@ class BubbleModel(object):
             rtol=rtol, atol=atol)
 
         return var
+
+    def get_variance_mm(self, z, r, kmin=1e-5, kmax=1e5, dlogk=0.05,
+        rtol=1e-5, atol=1e-5):
+        """
+        Return the variance in the matter field at redshift `z` when
+        smoothing on scale `r`.
+        """
+
+        return self.get_variance(z, r, 'mm', kmin=kmin, kmax=kmax, dlogk=dlogk,
+            rtol=rtol, atol=atol)
+
+    def get_variance_bb(self, z, r, Q=0.5, R=5., sigma=0.5, gamma=None,
+        alpha=0.0, kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5, atol=1e-5):
+        """
+        Return the variance in the ionization field at redshift `z` when
+        smoothing on scale `r`.
+        """
+
+        return self.get_variance(z, r, 'bb', Q=Q, R=R, sigma=sigma,
+            gamma=gamma, alpha=0.0, kmin=kmin, kmax=kmax, dlogk=dlogk,
+            rtol=rtol, atol=atol)
+
+    def get_variance_21cm(self, z, r, Q=0.5, R=5., sigma=0.5, gamma=None,
+        alpha=0.0, kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5, atol=1e-5):
+        """
+        Return the variance in the ionization field at redshift `z` when
+        smoothing on scale `r`.
+        """
+
+        return self.get_variance(z, r, '21cm', Q=Q, R=R, sigma=sigma,
+            gamma=gamma, alpha=alpha, Ts=Ts, kmin=kmin, kmax=kmax, dlogk=dlogk,
+            rtol=rtol, atol=atol)
 
     def get_variance_from_ps(self, ps, R, kmin=1e-5, kmax=1e5, rtol=1e-5,
         atol=1e-2):
@@ -1337,99 +1361,3 @@ class BubbleModel(object):
 
     def get_rsd_int_mu2(self, mu):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
-
-    def get_3d_realization(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., beta=1., use_kdtree=True,
-        include_rho=True):
-        """
-        Make a 3-d realization representative of this model.
-
-        .. note :: This just draws bubbles from the desired bubble size
-            distribution and positions them randomly in a box.
-
-        Parameters
-        ----------
-        z : int, float
-            Redshift of interest.
-        Lbox : int, float
-            Linear dimension of box to 'simulate' in [cMpc / h].
-        vox : int, float
-            Linear dimension of voxels in [cMpc / h].
-        use_kdtree : bool
-            If True, uses kdtree to speed-up placement of bubbles in volume.
-        include_rho : bool
-            If True, use Steven Murray's powerbox package to generate a 3-D
-            realization of the density field and multiply box by (1 + delta).
-
-        Returns
-        -------
-        A tuple containing (box of ones and zeros, density box, 21-cm box),
-        each of which are a 3-d array with dimensions [Lbox / vox]*3.
-
-        """
-
-        Npix = int(Lbox / vox)
-        pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma)
-        cdf = self.get_bsd_cdf(Q=Q, R=R, sigma=sigma, gamma=gamma)
-        num_per_vol = self.get_nb(Q=Q, R=R, sigma=sigma, gamma=gamma)
-
-        num = int(num_per_vol * Lbox**3)
-
-        bins = np.arange(0, Lbox+vox, vox)
-        binc = np.arange(0.5*vox, Lbox, vox)
-
-        xx, yy, zz = np.meshgrid(binc, binc, binc)
-
-        # Randomly generate `num` bubbles with sizes drawn from BSD.
-        n = np.random.rand(num)
-        R = np.exp(np.interp(np.log(n), np.log(cdf), np.log(self.tab_R)))
-
-        # Randomly generate (x, y, z) positions for all bubbles
-        p_len = np.random.rand(num*3).reshape(num, 3) * Lbox
-        # Get bubble positions in terms of array indices
-        p_bin = np.digitize(p_len, bins) - 1
-
-        # Initialize a box. We'll zero-out elements lying within bubbles below.
-        box = np.ones([binc.size]*3)
-
-        # Can speed things up with a kdtree if you want.
-        if use_kdtree:
-            pos = np.array([xx.ravel(), yy.ravel(), zz.ravel()]).T
-            kdtree = cKDTree(pos, boxsize=Lbox)
-
-        # Loop over bubbles and flag all cells within them
-        for h in range(p_bin.shape[0]):
-
-            # Brute force
-            if not use_kdtree:
-                i, j, k = p_bin[h]
-                dr = np.sqrt((xx - xx[i,j,k])**2 + (yy - yy[i,j,k])**2 \
-                   + (zz - zz[i,j,k])**2)
-                in_bubble = dr <= R[h]
-                box[in_bubble] = 0
-                continue
-
-            # Spee-up with kdtree
-            p = p_bin[h]
-
-            # `neaRy` are indices in `pos`, i.e., not (i, j, k) indices
-            d, neaRy = kdtree.query(p, k=1e4, distance_uppeRound=R * 10)
-
-            in_bubble = d <= R[h]
-            for elem in neaRy[in_bubble==True]:
-                a, b, c = pos[elem]
-                i, j, k = np.digitize([a, b, c], bins) - 1
-                box[i,j,k] = 0
-
-        # Set bulk IGM temperature
-        dTb = box * self.get_dTb_bulk(z, Ts=Ts)
-
-        if include_rho:
-            power = lambda k: self.get_ps_matter(z=z, k=k)
-            rho = pbox.LogNormalpowerbox(N=Npix, dim=3, pk=power,
-                boxlength=Lbox).delta_x()
-            dTb *= (1. + rho)
-        else:
-            rho = None
-
-        return box, rho, dTb

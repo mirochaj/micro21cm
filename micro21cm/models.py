@@ -588,16 +588,15 @@ class BubbleModel(object):
                     gamma=gamma, alpha=alpha, which_vol=which_vol)
 
                 if method == 3:
-                    corr = np.exp(-np.minimum(Qrelevant, Q))
+                    corr = np.exp(-Q)
                 elif method == 4:
-                    corr = 1. - np.minimum(Qrelevant, Q)
+                    corr = np.exp(-np.minimum(Qrelevant, Q))
                 elif method == 5:
                     Qtot = self.get_Qtot(Q=Q, R=R, sigma=sigma, gamma=gamma,
                         alpha=alpha)
-                    #corr = np.exp(-np.minimum(Qrelevant, Q)/Qtot)
                     corr = np.exp(-Qrelevant/Qtot)
                 elif method == 6:
-                    corr = np.exp(-Q)
+                    corr = 1. - np.minimum(Qrelevant, Q)
                 elif method == 7:
                     Qtot = self.get_Qtot(Q=Q, R=R, sigma=sigma, gamma=gamma,
                         alpha=alpha)
@@ -1361,3 +1360,50 @@ class BubbleModel(object):
 
     def get_rsd_int_mu2(self, mu):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
+
+    def calibrate_ps(self, k_in, Dsq_in, Q, which_ps='bb', maxiter=100,
+        xtol=1e-2, ftol=1e-3):
+        """
+        Find the best-fit micro21cm representation of an input ionization
+        power spectrum (presumably from 21cmFAST).
+
+        .. note :: For maxiter=100, this will take about ~1 minute in general.
+
+        """
+
+        if which_ps == 'bb':
+            func_ps = self.get_ps_bb
+        elif which_ps == '21cm':
+            func_ps = self.get_ps_21cm
+        else:
+            raise NotImplemented('Help!')
+
+        ps_bb = lambda pars: pars[2] \
+            * func_ps(z=np.inf, k=k_in, Q=Q,
+            R=pars[0], sigma=pars[1], gamma=pars[1])
+
+        Dsq_bb = lambda pars: k_in**3 * ps_bb(pars) / 2. / np.pi**2
+
+        # Assume error scales as k
+        #err = 0.1 * Dsq_in * (k_in / min(k_in))
+        func = lambda pars: np.sum((Dsq_bb(pars) - Dsq_in)**2)
+
+        # Use some intuition on guesses
+        if Q <= 0.2:
+            guess = [1., 1.2, 1.]
+        elif Q < 0.5:
+            guess = [5., 1.2, 0.7]
+        elif Q < 0.7:
+            guess = [10., 1.2, 0.7]
+        elif Q < 0.9:
+            guess = [20., 1.2, 0.6]
+        else:
+            guess = [30., 1.2, 0.6]
+
+        popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
+
+        par = 'sigma' if self.bubbles_pdf == 'lognormal' else 'gamma'
+
+        kw = {'norm': popt[2], 'R': popt[0], par: popt[1]}
+
+        return kw

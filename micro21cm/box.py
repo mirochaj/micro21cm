@@ -250,7 +250,7 @@ class Box(BubbleModel):
         if show_random:
             norm = max(var) / max(var_r)
             ax.plot(Qarr, np.array(var_r) * norm, color='k', ls=':',
-                label=r'noise w/ same $Q$ (re-scaled)')
+                label=r'noise (re-scaled)')
 
         ax.set_xlabel(r'$Q$')
         ax.set_ylabel(r'$\sigma_b^2$')

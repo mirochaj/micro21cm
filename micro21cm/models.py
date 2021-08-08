@@ -42,7 +42,7 @@ class BubbleModel(object):
         include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
-        Rmin=1e-2, Rmax=1e3, NR=1000, 
+        Rmin=1e-2, Rmax=1e3, NR=1000,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
         use_pbar=False, approx_linear=True, **_kw_):
@@ -234,11 +234,11 @@ class BubbleModel(object):
         else:
             return self.get_Tcmb(z) / (Ts - self.get_Tcmb(z))
 
-    def get_ps_mm(self, z, k):
+    def get_ps_mm(self, z, k, **_kw_):
         """ Just a wrapper around `get_ps_matter`. """
         return self.get_ps_matter(z, k)
 
-    def get_ps_matter(self, z, k):
+    def get_ps_matter(self, z, k, **_kw_):
         """
         Return matter power spectrum, P(k), at redshift `z` on scale `k`.
         """
@@ -1384,7 +1384,7 @@ class BubbleModel(object):
         return dTb**2 * cf_21
 
     def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
-        xi_bb=None):
+        xi_bb=None, **_kw_):
 
         bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
             xi_bb=xi_bb)
@@ -1463,11 +1463,17 @@ class BubbleModel(object):
     def get_rsd_int_mu2(self, mu):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
-    def calibrate_ps(self, k_in, Dsq_in, Q, which_ps='bb', maxiter=100,
-        xtol=1e-2, ftol=1e-3):
+    def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None, which_ps='bb',
+        maxiter=100, xtol=1e-2, ftol=1e-3):
         """
         Find the best-fit micro21cm representation of an input ionization
         power spectrum (presumably from 21cmFAST).
+
+        .. note :: Also useful for taking a log-normal BSD PS (ionization
+            or 21-cm) and calibrating a different BSD's parameters.
+
+        .. note :: Just minimizing the sum of squared difference between the
+            input spectrum and our model.
 
         .. note :: For maxiter=100, this will take about ~1 minute in general.
 
@@ -1475,32 +1481,37 @@ class BubbleModel(object):
 
         if which_ps == 'bb':
             func_ps = self.get_ps_bb
+            z = np.inf
         elif which_ps == '21cm':
             func_ps = self.get_ps_21cm
+            assert z is not None, "Must provide `z` for 21-cm PS!"
+            assert Ts is not None, "Must provide `Ts` for 21-cm PS!"
         else:
             raise NotImplemented('Help!')
 
-        ps_bb = lambda pars: pars[2] \
-            * func_ps(z=np.inf, k=k_in, Q=Q,
+        ps = lambda pars: pars[2] \
+            * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
             R=pars[0], sigma=pars[1], gamma=pars[1])
 
-        Dsq_bb = lambda pars: k_in**3 * ps_bb(pars) / 2. / np.pi**2
+        Dsq = lambda pars: k_in**3 * ps(pars) / 2. / np.pi**2
 
         # Assume error scales as k
         #err = 0.1 * Dsq_in * (k_in / min(k_in))
-        func = lambda pars: np.sum((Dsq_bb(pars) - Dsq_in)**2)
+        func = lambda pars: np.sum((Dsq(pars) - Dsq_in)**2)
+
+        _guess_ = 1.2 if self.bubbles_pdf == 'lognormal' else -2.5
 
         # Use some intuition on guesses
         if Q <= 0.2:
-            guess = [1., 1.2, 1.]
+            guess = [1., _guess_, 1.]
         elif Q < 0.5:
-            guess = [5., 1.2, 0.7]
+            guess = [5., _guess_, 1.]
         elif Q < 0.7:
-            guess = [10., 1.2, 0.7]
+            guess = [10., _guess_, 1.]
         elif Q < 0.9:
-            guess = [20., 1.2, 0.6]
+            guess = [20., _guess_, 1.]
         else:
-            guess = [30., 1.2, 0.6]
+            guess = [30., _guess_, 1.]
 
         popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
 

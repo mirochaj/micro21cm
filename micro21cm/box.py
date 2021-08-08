@@ -257,7 +257,7 @@ class Box(BubbleModel):
         ax.scatter(Qarr, var, **kwargs)
 
         if show_analytic:
-            ax.plot(Qarr, var_a, label='analytic', **kwargs)
+            ax.plot(Qarr, var_a, **kwargs)
 
         if show_random and (not has_ax):
             norm = max(var) / max(var_r)

@@ -10,7 +10,7 @@ Description:
 
 """
 
-import camb
+import os
 import numpy as np
 from scipy.optimize import fmin
 from scipy.interpolate import interp1d
@@ -22,18 +22,30 @@ from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, \
 tiny_Q = 1e-3
 tiny_cf = 1e-16
 
+try:
+    import camb
+except ImportError:
+    pass
+
+try:
+    import h5py
+except ImportError:
+    pass
+
+PATH = os.environ.get("MICRO21CM")
+
 class BubbleModel(object):
-    def __init__(self, bubbles=True, bubbles_ion=True,
-        bubbles_pdf='lognormal', bubbles_via_Rpeak=True,
+    def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
+        bubbles_via_Rpeak=True, bubbles_model='fzh04',
         include_adiabatic_fluctuations=True,
         include_P1=True, include_P2=True,
         include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
-        Rmin=1e-2, Rmax=1e3, NR=1000,
+        Rmin=1e-2, Rmax=1e3, NR=1000, 
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
-        use_pbar=False, approx_small_Q=False, approx_linear=True, **_kw_):
+        use_pbar=False, approx_linear=True, **_kw_):
         """
         Make a simple bubble model of the IGM.
 
@@ -121,7 +133,7 @@ class BubbleModel(object):
         self.bubbles_ion = bubbles_ion
         self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.use_pbar = use_pbar
-        self.approx_small_Q = approx_small_Q
+        self.bubbles_model = bubbles_model
         self.include_P1_corr = include_P1_corr
         self.include_P2_corr = include_P2_corr
         self.include_overlap_corr = include_overlap_corr
@@ -320,10 +332,7 @@ class BubbleModel(object):
             V = 4. * np.pi * self.tab_R**3 / 3.
             integ = np.trapz(_bsd * V * self.tab_R, x=np.log(self.tab_R))
 
-            if self.approx_small_Q:
-                _Q_ = integ
-            else:
-                _Q_ = 1. - np.exp(-integ)
+            _Q_ = 1. - np.exp(-integ)
 
             if abs(Q - _Q_) < Qtol:
                 break
@@ -409,11 +418,7 @@ class BubbleModel(object):
 
         This is normalized so that:
 
-        if self.approx_small_Q:
-            \int dn/dlnR(R) V(R) dlnR = Q
-        else:
-            1 - \exp{-\int dn/dlnR(R) V(R) dlnR} = Q
-
+        1 - \exp{-\int dn/dlnR(R) V(R) dlnR} = Q
 
         Parameters
         ----------
@@ -454,12 +459,7 @@ class BubbleModel(object):
         norm = 1. / integ.max()
         integ = np.trapz(integ * norm, x=np.log(self.tab_R)) / norm
 
-        if self.approx_small_Q:
-            corr = Q / integ
-        else:
-            # In this case, normalize n_b such that
-            # 1 - \exp{-\int n_b V_b dR} = Q
-            corr = -1 * np.log(1 - Q) / integ
+        corr = -1 * np.log(1 - Q) / integ
 
         # Normalize to provided ionized fraction
         bsd = _bsd * corr
@@ -557,8 +557,8 @@ class BubbleModel(object):
             alpha=alpha)
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
-    def get_overlap_corr(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0,
-        exclusion=0, method=0, which_vol='o'):
+    def get_overlap_corr(self, d, Q=0.0, R=5., sigma=0.5, gamma=0.,
+        alpha=0.0, exclusion=0, method=0, which_vol='o'):
 
         if 0 < method < 1:
             suppression = method
@@ -573,10 +573,7 @@ class BubbleModel(object):
             #P2 = self.get_P2(d, Q=Q, R=R, sigma=sigma, gamma=gamma,
             #    alpha=alpha)
 
-            if self.approx_small_Q:
-                _Q_ = Q
-            else:
-                _Q_ = 1. - np.exp(-Q)
+            _Q_ = Q
 
             # Average between two corrections we could use or just use Q.
             if int(method) == 1:
@@ -618,7 +615,7 @@ class BubbleModel(object):
             alpha=alpha)
 
         V_R = 4. * np.pi * self.tab_R**3 / 3.
-        V_o = self.get_overlap_vol(self.tab_R, d)
+        V_o = self.get_overlap_vol(d, self.tab_R)
 
         if which_vol == 'o':
             V = V_o
@@ -658,7 +655,7 @@ class BubbleModel(object):
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
-        V_o = self.get_overlap_vol(self.tab_R, d)
+        V_o = self.get_overlap_vol(d, self.tab_R)
 
         if exclusion:
             V = 4. * np.pi * self.tab_R**3 / 3.
@@ -668,10 +665,10 @@ class BubbleModel(object):
             integ = np.trapz(bsd * V_o * self.tab_R,
                 x=np.log(self.tab_R))
 
-        if self.approx_small_Q:
-            P1 = integ
-        else:
+        if self.bubbles_model == 'fzh04':
             P1 = 1. - np.exp(-integ)
+        elif self.bubbles_model == 'test':
+            P1 = integ * np.exp(-integ)
 
         if use_corr and self.include_P1_corr:
             corr = self.get_overlap_corr(d, Q=Q, R=R, sigma=sigma,
@@ -693,7 +690,7 @@ class BubbleModel(object):
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
-        V_o = self.get_overlap_vol(self.tab_R, d)
+        V_o = self.get_overlap_vol(d, self.tab_R)
 
         V = 4. * np.pi * self.tab_R**3 / 3.
 
@@ -702,9 +699,10 @@ class BubbleModel(object):
         integ2 = np.trapz(bsd * (V - V_o) * (1. + xi_bb) *
             self.tab_R, x=np.log(self.tab_R))
 
-        if self.approx_small_Q:
-            P2 = integ1 * integ2
-        else:
+        if self.bubbles_model == 'fzh04':
+            P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
+        elif self.bubbles_model == 'test':
+            #P2 = (integ1 * np.exp(-integ1))**2
             P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
 
         if use_corr and self.include_P2_corr:
@@ -717,16 +715,68 @@ class BubbleModel(object):
 
         return P2 * corr
 
-    def get_overlap_vol(self, R, d):
+    @property
+    def tab_Vo_3d(self):
+        if not hasattr(self, '_tab_Vo_3d_'):
+            fn = '{}/input/overlap_vol_log10R_{:.1f}_{:.1f}_N_{:.0f}.hdf5'.format(
+                PATH, np.log10(self.Rmin), np.log10(self.Rmax), self.NR)
+
+            if not os.path.exists('{}'.format(fn)):
+                raise IOError("No such file: {}/input/{}".format(PATH, fn))
+
+            with h5py.File(fn, 'r') as f:
+                self._tab_Vo_3d_ = np.array(f[('Vo')])
+
+        return self._tab_Vo_3d_
+
+    def get_Vo_2d(self, d):
+        k = np.argmin(np.abs(d - self.tab_R))
+        return self.tab_Vo_3d[k]
+
+        #tab = np.zeros([self.tab_R.size] * 2)
+        #for i, R1 in enumerate(self.tab_R):
+        #    tab[i,:] = np.array([self.get_overlap_vol_generic(d, R1, R2) \
+        #        for j, R2 in enumerate(self.tab_R)])
+#
+        #return tab
+
+    def get_PN(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
+        xi_bb=0., use_corr=True):
+        """
+        Experimental treatment of 'overlap' component of P2.
+        """
+
+        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+
+        V_o = self.get_Vo_2d(d)
+
+        P2 = []
+        for i, R1 in enumerate(self.tab_R):
+            _P2_1 = bsd[i] * np.trapz(bsd * V_o[i,:]**2 * self.tab_R,
+                x=np.log(self.tab_R))
+
+            #P2_2 = _P2_1
+            #_P2_2 = np.trapz(bsd * V_o[i,:] * self.tab_R,
+            #    x=np.log(self.tab_R))
+
+            P2.append(_P2_1 * np.exp(-_P2_1))
+
+        PN = np.trapz(np.array(P2) * self.tab_R, x=np.log(self.tab_R))
+
+        return PN
+
+    def get_overlap_vol(self, d, R):
         """
         Return overlap volume of two spheres of radius R separated by distance d.
 
         Parameters
         ----------
-        R : int, float, np.ndarray
-            Bubble size(s) in Mpc/h.
         d : int, float
             Separation in Mpc/h.
+        R : int, float, np.ndarray
+            Bubble size(s) in Mpc/h.
+
 
         """
 
@@ -739,6 +789,52 @@ class BubbleModel(object):
                 return 0.0
 
         return V_o
+
+    def get_overlap_vol_generic(self, d, r1, r2):
+        """
+        Return overlap volume of two spheres of radius R1 and R2, which area separated by distance d.
+
+        .. note :: This will reduce to `get_overlap_vol` if R1==R2.
+
+        Parameters
+        ----------
+        d : int, float
+            Separation in Mpc/h.
+        R1, R2 : int, float, np.ndarray
+            Bubble size(s) in Mpc/h.
+
+        """
+
+        if r2 >= r1:
+            R1 = r1
+            R2 = r2
+        else:
+            R1 = r2
+            R2 = r1
+
+
+        Vo = np.pi * (R2 + R1 - d)**2 \
+            * (d**2 + 2. * d * R1 - 3. * R1**2 \
+             + 2. * d * R2 + 6. * R1 * R2 - 3. * R2**2) / 12. / d
+
+        if type(Vo) == np.ndarray:
+            # Small-scale vs. large Scale
+            SS = d <= R2 - R1
+            LS = d >= R1 + R2
+
+            Vo[LS == 1] = 0.0
+
+            if type(R1) == np.ndarray:
+                Vo[SS == 1] = 4. * np.pi * R1[SS == 1]**3 / 3.
+            else:
+                Vo[SS == 1] = 4. * np.pi * R1**3 / 3.
+        else:
+            if d <= (R2 - R1):
+                return 4. * np.pi * R1**3 / 3.
+            elif d >= (R1 + R2):
+                return 0.0
+
+        return Vo#np.maximum(Vo, 0)
 
     def get_bb(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         separate=False, xi_bb=None, **_kw_):
@@ -793,23 +889,29 @@ class BubbleModel(object):
             # Assumes it's the same for all bubbles
             assert xi_bb.size == self.tab_R.size
 
-        P1 = []
-        P2 = []
+        P1 = np.zeros_like(self.tab_R)
+        P2 = np.zeros_like(self.tab_R)
+        Px = np.zeros_like(self.tab_R)
         for i, RR in enumerate(self.tab_R):
             pb.update(i)
-            P1.append(self.get_P1(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                gamma=gamma))
-            P2.append(self.get_P2(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                gamma=gamma, xi_bb=xi_bb[i]))
+            P1[i] = self.get_P1(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
+                gamma=gamma)
+            P2[i] = self.get_P2(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
+                gamma=gamma, xi_bb=xi_bb[i])
+
+            if self.bubbles_model == 'test':
+                Px[i] = self.get_PN(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
+                    gamma=gamma, xi_bb=xi_bb[i])
 
         pb.finish()
-        P1 = np.array(P1)
-        P2 = np.array(P2)
 
         if separate:
-            return P1, P2
+            return P1, P2, Px
         else:
-            return P1 + (1-P1) * P2
+            if self.bubbles_model == 'fzh04':
+                return P1 + (1 - P1) * P2
+            elif self.bubbles_model == 'test':
+                return P1 + P2 + Px * (1 - P1) * (1 - P2)
 
     def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         separate=False, **_kw_):
@@ -1049,13 +1151,13 @@ class BubbleModel(object):
         elif self.use_volume_match == 3:
             Rsm = R
         elif self.use_volume_match == 10:
-            bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            bb1, bb2, bbx = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, separate=True)
             bb = bb1 + bb2
             P1_frac = bb1 / bb
             Rsm = np.interp(0.75, P1_frac[-1::-1], self.tab_R[-1::-1])
         elif self.use_volume_match == 11:
-            bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            bb1, bb2, bbx = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, separate=True)
             bb = bb1 + bb2
             P2_frac = bb2 / bb

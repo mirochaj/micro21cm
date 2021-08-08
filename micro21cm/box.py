@@ -119,6 +119,7 @@ class Box(BubbleModel):
         assert vox == 1, "There's a bug for vox != 1 right now :("
 
         Npix = int(Lbox / vox)
+        Vpix = vox**3
 
         pdf = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma)
         cdf = self.get_bsd_cdf(Q=Q, R=R, sigma=sigma, gamma=gamma)
@@ -182,8 +183,16 @@ class Box(BubbleModel):
                 a, b, c = pos[elem]
                 i, j, k = np.digitize([a, b, c], bins) - 1
 
-                box[i,j,k] = 0
-                box_tot[i,j,k] += 1
+                if allow_partial_ionization:
+                    Vb = 4. * np.pi * R_r[h]**3 / 3.
+
+                    tmp = 1 * box[i,j,k]
+                    tmp -= Vb / Vpix
+                    box[i,j,k] = max(0, tmp)
+                    box_tot[i,j,k] += Vb / Vpix
+                else:
+                    box[i,j,k] = 0
+                    box_tot[i,j,k] += 1
 
         self._cache_box_['bubbles'][args] = box, box_tot
 
@@ -208,12 +217,12 @@ class Box(BubbleModel):
 
     def plot_variance_vs_Q(self, Qarr=None, Rsm=1, R=5., sigma=1., gamma=0.,
         Lbox=100., vox=1., seed=None, fig=1, ax=None, show_random=True,
-        show_analytic=True, **kwargs):
+        show_analytic=True, allow_partial_ionization=False, **kwargs):
 
-
+        has_ax = True
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
-
+            has_ax = False
         if Qarr is None:
             Qarr = np.arange(0.1, 1.1, 0.2)
 
@@ -227,7 +236,8 @@ class Box(BubbleModel):
             pb.update(i)
 
             box, box_tot = self.get_box_bubbles(z=np.inf, Lbox=Lbox, vox=vox,
-                Q=_Q_, R=R, sigma=sigma, gamma=gamma, use_kdtree=True, seed=seed)
+                Q=_Q_, R=R, sigma=sigma, gamma=gamma, use_kdtree=True, seed=seed,
+                allow_partial_ionization=allow_partial_ionization)
 
             box_sm = smooth_box(box, R=Rsm, periodic=True).real
             var.append(np.std(box_sm.ravel())**2)
@@ -244,10 +254,12 @@ class Box(BubbleModel):
 
         pb.finish()
 
-        ax.scatter(Qarr, var, label='numerical', **kwargs)
-        ax.plot(Qarr, var_a, label='analytic', **kwargs)
+        ax.scatter(Qarr, var, **kwargs)
 
-        if show_random:
+        if show_analytic:
+            ax.plot(Qarr, var_a, label='analytic', **kwargs)
+
+        if show_random and (not has_ax):
             norm = max(var) / max(var_r)
             ax.plot(Qarr, np.array(var_r) * norm, color='k', ls=':',
                 label=r'noise (re-scaled)')
@@ -305,7 +317,8 @@ class Box(BubbleModel):
         return ax
 
     def plot_Qint_vs_Q(self, Qarr=None, R=5., sigma=1., gamma=0.,
-        Lbox=100., vox=1., seed=None, fig=1, ax=None, **kwargs):
+        Lbox=100., vox=1., seed=None, fig=1, ax=None,
+        allow_partial_ionization=False, **kwargs):
 
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
@@ -323,7 +336,8 @@ class Box(BubbleModel):
             pb.update(i)
 
             box, box_tot = self.get_box_bubbles(z=np.inf, Lbox=Lbox, vox=vox,
-                Q=_Q_, R=R, sigma=sigma, gamma=gamma, use_kdtree=True, seed=seed)
+                Q=_Q_, R=R, sigma=sigma, gamma=gamma, use_kdtree=True, seed=seed,
+                allow_partial_ionization=allow_partial_ionization)
             Npix = box.shape[0]
 
             Qint.append(self.get_Qint(d=np.inf, Q=_Q_, R=R, sigma=sigma,
@@ -341,7 +355,8 @@ class Box(BubbleModel):
         return ax
 
     def plot_Q(self, Qarr=None, Rsm=1, R=5., sigma=1., gamma=0.,
-        Lbox=100., vox=1., seed=None, fig=1, ax=None, **kwargs):
+        Lbox=100., vox=1., seed=None, fig=1, ax=None,
+        allow_partial_ionization=False, **kwargs):
 
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
@@ -356,7 +371,8 @@ class Box(BubbleModel):
             pb.update(i)
 
             box, box_tot = self.get_box_bubbles(z=np.inf, Lbox=Lbox, vox=vox,
-                seed=seed, Q=_Q_, R=R, sigma=sigma, gamma=gamma)
+                seed=seed, Q=_Q_, R=R, sigma=sigma, gamma=gamma,
+                allow_partial_ionization=allow_partial_ionization)
 
             Qbox = box[box == 0].size / float(box.size)
 

@@ -715,6 +715,43 @@ class BubbleModel(object):
 
         return P2 * corr
 
+    def get_PN(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
+        xi_bb=0., use_corr=True, N=1):
+        """
+        Experimental treatment of 'overlap' component of P2.
+        """
+
+        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+
+        V_o = self.get_Vo_2d(d)
+        V_R = 4. * np.pi * self.tab_R**3 / 3.
+
+        P = np.zeros_like(self.tab_R)
+        for i, R1 in enumerate(self.tab_R):
+
+            # If no overlap, will have been counted in 2-bubble term.
+            ok = V_o[i,:] > 0
+            V1 = (4. * np.pi * R1**3 / 3.)
+
+            # Two points in same structure
+            if N == 1:
+                _P = bsd[i] * np.trapz(ok * bsd * V1 * V_R * self.tab_R,
+                    x=np.log(self.tab_R))
+
+                P[i] = _P * np.exp(-_P)
+            # Two points in different structures
+            else:
+                # Abundance of merged bubbles
+                _P = bsd[i] * np.trapz(ok * bsd * (V1 + V_R) * self.tab_R,
+                    x=np.log(self.tab_R))
+
+                P[i] = _P * np.exp(-_P)
+
+        PN = np.trapz(P * self.tab_R, x=np.log(self.tab_R))
+
+        return PN**2
+
     @property
     def tab_Vo_3d(self):
         if not hasattr(self, '_tab_Vo_3d_'):
@@ -732,39 +769,6 @@ class BubbleModel(object):
     def get_Vo_2d(self, d):
         k = np.argmin(np.abs(d - self.tab_R))
         return self.tab_Vo_3d[k]
-
-        #tab = np.zeros([self.tab_R.size] * 2)
-        #for i, R1 in enumerate(self.tab_R):
-        #    tab[i,:] = np.array([self.get_overlap_vol_generic(d, R1, R2) \
-        #        for j, R2 in enumerate(self.tab_R)])
-#
-        #return tab
-
-    def get_PN(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
-        xi_bb=0., use_corr=True):
-        """
-        Experimental treatment of 'overlap' component of P2.
-        """
-
-        bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha)
-
-        V_o = self.get_Vo_2d(d)
-
-        P2 = []
-        for i, R1 in enumerate(self.tab_R):
-            _P2_1 = bsd[i] * np.trapz(bsd * V_o[i,:]**2 * self.tab_R,
-                x=np.log(self.tab_R))
-
-            #P2_2 = _P2_1
-            #_P2_2 = np.trapz(bsd * V_o[i,:] * self.tab_R,
-            #    x=np.log(self.tab_R))
-
-            P2.append(_P2_1 * np.exp(-_P2_1))
-
-        PN = np.trapz(np.array(P2) * self.tab_R, x=np.log(self.tab_R))
-
-        return PN
 
     def get_overlap_vol(self, d, R):
         """
@@ -891,7 +895,8 @@ class BubbleModel(object):
 
         P1 = np.zeros_like(self.tab_R)
         P2 = np.zeros_like(self.tab_R)
-        Px = np.zeros_like(self.tab_R)
+        P12 = np.zeros_like(self.tab_R)
+        P22 = np.zeros_like(self.tab_R)
         for i, RR in enumerate(self.tab_R):
             pb.update(i)
             P1[i] = self.get_P1(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
@@ -900,8 +905,10 @@ class BubbleModel(object):
                 gamma=gamma, xi_bb=xi_bb[i])
 
             if self.bubbles_model == 'test':
-                Px[i] = self.get_PN(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                    gamma=gamma, xi_bb=xi_bb[i])
+                P12[i] = self.get_PN(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
+                    gamma=gamma, xi_bb=xi_bb[i], N=1)
+                #P22[i] = self.get_PN(RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
+                #    gamma=gamma, xi_bb=xi_bb[i], N=2)
 
         pb.finish()
 
@@ -911,7 +918,8 @@ class BubbleModel(object):
             if self.bubbles_model == 'fzh04':
                 return P1 + (1 - P1) * P2
             elif self.bubbles_model == 'test':
-                return P1 + P2 + Px * (1 - P1) * (1 - P2)
+                return P1 * (1 - P12) + P2 \
+                     + P12 + P22
 
     def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         separate=False, **_kw_):
@@ -1133,15 +1141,18 @@ class BubbleModel(object):
             return -1, 0.0
 
         if self.use_volume_match == 1:
-            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-            # convert to dn/dlogR
-            bsd = bsd * self.tab_R
-            # weight by volume
-            bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
-            # Doesn't matter here but OK.
-            bsd = bsd / Q
-            # find peak in V dn/dlnR
-            Rsm = self.tab_R[np.argmax(bsd)]
+            if self.bubbles_via_Rpeak:
+                Rsm = R
+            else:
+                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+                # convert to dn/dlogR
+                bsd = bsd * self.tab_R
+                # weight by volume
+                bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
+                # Doesn't matter here but OK.
+                bsd = bsd / Q
+                # find peak in V dn/dlnR
+                Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 2:
             bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
             # weight by volume
@@ -1464,7 +1475,7 @@ class BubbleModel(object):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
     def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None, which_ps='bb',
-        maxiter=100, xtol=1e-2, ftol=1e-3):
+        free_norm=True, maxiter=100, xtol=1e-2, ftol=1e-3):
         """
         Find the best-fit micro21cm representation of an input ionization
         power spectrum (presumably from 21cmFAST).
@@ -1489,9 +1500,13 @@ class BubbleModel(object):
         else:
             raise NotImplemented('Help!')
 
-        ps = lambda pars: pars[2] \
-            * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
-            R=pars[0], sigma=pars[1], gamma=pars[1])
+        if free_norm:
+            ps = lambda pars: pars[2] \
+                * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
+                R=pars[0], sigma=pars[1], gamma=pars[1])
+        else:
+            ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
+                R=pars[0], sigma=pars[1], gamma=pars[1])
 
         Dsq = lambda pars: k_in**3 * ps(pars) / 2. / np.pi**2
 
@@ -1503,20 +1518,25 @@ class BubbleModel(object):
 
         # Use some intuition on guesses
         if Q <= 0.2:
-            guess = [1., _guess_, 1.]
+            guess = [1., _guess_]
         elif Q < 0.5:
-            guess = [5., _guess_, 1.]
+            guess = [5., _guess_]
         elif Q < 0.7:
-            guess = [10., _guess_, 1.]
+            guess = [10., _guess_]
         elif Q < 0.9:
-            guess = [20., _guess_, 1.]
+            guess = [20., _guess_]
         else:
-            guess = [30., _guess_, 1.]
+            guess = [30., _guess_]
+
+        if free_norm:
+            guess.append(1.)
 
         popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
 
         par = 'sigma' if self.bubbles_pdf == 'lognormal' else 'gamma'
 
-        kw = {'norm': popt[2], 'R': popt[0], par: popt[1]}
+        kw = {'R': popt[0], par: popt[1]}
+        if free_norm:
+            kw['norm'] = popt[2]
 
         return kw

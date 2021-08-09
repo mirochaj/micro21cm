@@ -6,10 +6,11 @@ Author: Jordan Mirocha
 Affiliation: McGill University
 Created on: Wed  4 Aug 2021 11:41:40 EDT
 
-Description:
+Description: Make 3-d realizations of our bubble model.
 
 """
 
+import os
 import numpy as np
 import matplotlib.pyplot as pl
 from .models import BubbleModel
@@ -18,6 +19,11 @@ from .util import smooth_box, ProgressBar, bin_c2e
 
 try:
     import powerbox as pbox
+except ImportError:
+    pass
+
+try:
+    import h5py
 except ImportError:
     pass
 
@@ -31,6 +37,99 @@ class Box(BubbleModel):
         Treat this just like a BubbleModel instance.
         """
         BubbleModel.__init__(self, **kwargs)
+
+    def get_box_path(self, Q, z=None, which_box='bubble',
+        allow_partial_ionization=0,
+        seeds=None, Lbox=100., vox=1., **kwargs):
+
+        path = 'boxes_R_{:.1f}'.format(kwargs['R'])
+        if self.bubbles_pdf == 'lognormal':
+            path += '_sigma_{:.2f}'.format(kwargs['sigma'])
+        else:
+            path += '_gamma_{:.2f}'.format(kwargs['gamma'])
+
+        if which_box != 'bubble':
+            path += '_z_{:.2f}'.format(z)
+
+        if which_box == '21cm':
+            path += '_Ts_{:.1f}'.format(kwargs['Ts'])
+
+        return path
+
+    def get_box_name(self, Q, which_box='bubble', Lbox=100, vox=1., seed=None):
+        fn = 'box_{}_L{:.0f}_v_{:.1f}_Q_{:.2f}_seed_{}'.format(which_box,
+            Lbox, vox, Q, seed)
+
+        return fn
+
+    def generate_boxes(self, Q, z=None, which_box='bubble',
+        allow_partial_ionization=0,
+        seeds=None, Lbox=100., vox=1., clobber=False, **kwargs):
+        """
+        Generate a series of boxes at different Q's so we can save time later
+        and just load them from disk.
+
+        Parameters
+        ----------
+        Q : np.ndarray
+            Array of Q values at which to run boxes.
+        which_box : str
+            Can be 'bb', 'density', or '21cm' at this point.
+        allow_partial_ionization : bool
+            Whether or not to attempt to include subgrid scheme for ionization.
+
+        All additional kwargs are those getting passed to the `get_ps_<whatever>`
+        method of our inherited modeling instance.
+
+        """
+
+        if which_box == 'bubble':
+            box_func = self.get_box_bubbles
+        elif which_box == 'density':
+            box_func = self.get_box_density
+            assert z is not None, "Must pass `z` for density box!"
+        elif which_box == '21cm':
+            box_func = self.get_box_21cm
+            assert z is not None, "Must pass `z` for 21-cm box!"
+        else:
+            raise NotImplemented('help')
+
+        if seeds is not None:
+            assert len(seeds) == len(Q)
+        else:
+            seeds = [None] * len(Q)
+
+        path = self.get_box_path(Q, z=z, which_box=which_box,
+            allow_partial_ionization=allow_partial_ionization,
+            seeds=seeds, Lbox=Lbox, vox=vox, **kwargs)
+
+        if not os.path.exists(path):
+            os.mkdir(path)
+
+        pb = ProgressBar(Q.size, name='box(Q)')
+        pb.start()
+
+        # Loop over Q and save boxes
+        for i, _Q_ in enumerate(Q):
+            pb.update(i)
+
+            fn = self.get_box_name(_Q_, which_box=which_box, Lbox=Lbox, vox=vox)
+
+            if os.path.exists(fn) and (not clobber):
+                print("Found box {}. Moving on...".format(fn))
+                continue
+
+            box = box_func(z, Q=_Q_, Lbox=Lbox, vox=vox,
+                allow_partial_ionization=allow_partial_ionization, seed=seeds[i],
+                **kwargs)
+
+            with h5py.File(fn, 'w') as f:
+                f.create_dataset(box, name=which_box)
+
+            print("Wrote {}.".format(fn))
+
+        pb.finish()
+
 
     def get_box_density(self, z, k, vox=1., Lbox=100.):
         """
@@ -350,6 +449,12 @@ class Box(BubbleModel):
         ax.plot(Qarr, Qint_num, label='numerical', **kwargs)
         ax.set_xlabel(r'$Q$')
         ax.set_ylabel(r'$Q_{\rm{int}}$')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_xticks(np.arange(0, 1.1, 0.1))
+        ax.set_yticks(np.arange(0, 1.1, 0.1))
+        ax.set_xticks(np.arange(0.05, 1.1, 0.1), minor=True)
+        ax.set_yticks(np.arange(0.05, 1.05, 0.1), minor=True)
         ax.legend()
 
         return ax
@@ -381,6 +486,13 @@ class Box(BubbleModel):
         pb.finish()
 
         ax.plot(Qarr, Qarr, color='k', ls=':')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_xticks(np.arange(0, 1.1, 0.1))
+        ax.set_yticks(np.arange(0, 1.1, 0.1))
+        ax.set_xticks(np.arange(0.05, 1.1, 0.1), minor=True)
+        ax.set_yticks(np.arange(0.05, 1.05, 0.1), minor=True)
+        ax.legend()
 
         ax.set_xlabel(r'$Q_{\rm{in}}$')
         ax.set_ylabel(r'$Q_{\rm{box}}$')

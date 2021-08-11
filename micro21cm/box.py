@@ -43,6 +43,7 @@ class Box(BubbleModel):
         seeds=None, Lbox=100., vox=1., **kwargs):
 
         path = 'boxes_R_{:.1f}'.format(kwargs['R'])
+
         if self.bubbles_pdf == 'lognormal':
             path += '_sigma_{:.2f}'.format(kwargs['sigma'])
         else:
@@ -91,6 +92,8 @@ class Box(BubbleModel):
         elif which_box == '21cm':
             box_func = self.get_box_21cm
             assert z is not None, "Must pass `z` for 21-cm box!"
+        elif which_box == 'noise':
+            box_func = self.get_box_rand
         else:
             raise NotImplemented('help')
 
@@ -113,7 +116,9 @@ class Box(BubbleModel):
         for i, _Q_ in enumerate(Q):
             pb.update(i)
 
-            fn = self.get_box_name(_Q_, which_box=which_box, Lbox=Lbox, vox=vox)
+            fn = path + '/' \
+                + self.get_box_name(_Q_, which_box=which_box, Lbox=Lbox, vox=vox) \
+                + '.hdf5'
 
             if os.path.exists(fn) and (not clobber):
                 print("Found box {}. Moving on...".format(fn))
@@ -124,7 +129,7 @@ class Box(BubbleModel):
                 **kwargs)
 
             with h5py.File(fn, 'w') as f:
-                f.create_dataset(box, name=which_box)
+                f.create_dataset(which_box, data=box)
 
             print("Wrote {}.".format(fn))
 

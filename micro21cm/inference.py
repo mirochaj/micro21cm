@@ -45,8 +45,8 @@ _priors_broad = \
  'Ts': (1e-2, 1000.),
  'Q': (0, 1),
  'R': (0, 100),
- 'sigma': (0.05, 2),
- 'gamma': (-5, 4),
+ 'sigma': (0.5, 2),
+ 'gamma': (-2, 4),
 }
 
 _guesses_broad = \
@@ -337,6 +337,11 @@ class FitHelper(object):
                 pass
             else:
                 fit_z = np.array([fit_z])
+
+            #if np.all(np.diff(self.data['z']) > 0):
+            #    fit_z = fit_z.size - fit_z - 1
+            #else:
+            #    pass
 
             self._fit_zindex = np.array(fit_z, dtype=int)
 

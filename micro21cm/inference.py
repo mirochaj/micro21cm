@@ -46,7 +46,7 @@ _priors_broad = \
  'Q': (0, 1),
  'R': (0, 100),
  'sigma': (0.5, 2),
- 'gamma': (-2, 4),
+ 'gamma': (-4, 0),
 }
 
 _guesses_broad = \

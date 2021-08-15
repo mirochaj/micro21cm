@@ -39,17 +39,16 @@ class Box(BubbleModel):
         BubbleModel.__init__(self, **kwargs)
 
     def get_box_path(self, Q, z=None, which_box='bubble',
-        allow_partial_ionization=0,
-        seeds=None, Lbox=100., vox=1., **kwargs):
+        allow_partial_ionization=0, path='.', Lbox=100., vox=1., **kwargs):
 
-        path = 'boxes_R_{:.1f}'.format(kwargs['R'])
+        path = '{}/boxes_R_{:.1f}'.format(path, kwargs['R'])
 
         if self.bubbles_pdf == 'lognormal':
             path += '_sigma_{:.2f}'.format(kwargs['sigma'])
         else:
             path += '_gamma_{:.2f}'.format(kwargs['gamma'])
 
-        if which_box != 'bubble':
+        if which_box != 'bubbles':
             path += '_z_{:.2f}'.format(z)
 
         if which_box == '21cm':
@@ -64,7 +63,7 @@ class Box(BubbleModel):
         return fn
 
     def generate_boxes(self, Q, z=None, which_box='bubble',
-        allow_partial_ionization=0,
+        allow_partial_ionization=0, path='.',
         seeds=None, Lbox=100., vox=1., clobber=False, **kwargs):
         """
         Generate a series of boxes at different Q's so we can save time later
@@ -84,7 +83,7 @@ class Box(BubbleModel):
 
         """
 
-        if which_box == 'bubble':
+        if which_box == 'bubbles':
             box_func = self.get_box_bubbles
         elif which_box == 'density':
             box_func = self.get_box_density
@@ -103,7 +102,7 @@ class Box(BubbleModel):
             seeds = [None] * len(Q)
 
         path = self.get_box_path(Q, z=z, which_box=which_box,
-            allow_partial_ionization=allow_partial_ionization,
+            allow_partial_ionization=allow_partial_ionization, path=path,
             seeds=seeds, Lbox=Lbox, vox=vox, **kwargs)
 
         if not os.path.exists(path):
@@ -135,11 +134,41 @@ class Box(BubbleModel):
 
         pb.finish()
 
+    def load_box(self, path='.', Lbox=100., vox=1., Q=0.0, Ts=np.inf,
+        R=5., sigma=0.5, gamma=0., use_kdtree=True, which_box='bubble',
+        allow_partial_ionization=True, z=None, seed=None):
 
-    def get_box_density(self, z, k, vox=1., Lbox=100.):
+        path = self.get_box_path(Q, z=z, which_box=which_box,
+            allow_partial_ionization=allow_partial_ionization, path=path,
+            seed=seed, Lbox=Lbox, vox=vox, Ts=Ts, R=R, sigma=sigma, gamma=gamma)
+
+        fn = path + '/' \
+            + self.get_box_name(Q, which_box=which_box, Lbox=Lbox, vox=vox,
+                seed=seed) \
+            + '.hdf5'
+
+        if os.path.exists(fn):
+            with h5py.File(fn, 'r') as f:
+                data = np.array(f[(which_box)])
+
+            print("Read box from {}.".format(fn))
+
+            return data
+        else:
+            print("No pre-existing box in {}.".format(fn))
+
+        return None
+
+    def get_box_density(self, z, vox=1., Lbox=100.):
         """
         Create a density box using Steven Murray's `powerbox` package.
         """
+
+        box_disk = self.load_box(z=z, Lbox=Lbox, vox=box, which_box='density')
+
+        if box_disk is not None:
+            return box_disk
+
         power = lambda k: self.get_ps_matter(z=z, k=k)
 
         Npix = Lbox / vox
@@ -149,8 +178,15 @@ class Box(BubbleModel):
         return rho
 
     def get_box_21cm(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., use_kdtree=True,
+        R=5., sigma=0.5, gamma=0., use_kdtree=True, path='.',
         allow_partial_ionization=True):
+
+        box_disk = self.load_box(path=path, Q=Q, z=z, which_box='21cm',
+            allow_partial_ionization=allow_partial_ionization,
+            seeds=seeds, Lbox=Lbox, vox=vox)
+
+        if box_disk is not None:
+            return box_disk
 
         xHI, Nb = self.get_box_bubbles(z, Lbox=Lbox, vox=vox, Q=Q, Ts=Ts,
             R=R, sigma=sigma, gamma=gamma, use_kdtree=use_kdtree,
@@ -160,7 +196,7 @@ class Box(BubbleModel):
         T0 = box * self.get_dTb_bulk(z, Ts=Ts)
 
         # Density box, no correlation with bubble box.
-        rho = self.get_box_density(z, k, Npix, Lbox)
+        rho = self.get_box_density(z, Npix, Lbox)
 
         # Brightness temperature box
         dTb = T0 * xHI * (1. + rho)
@@ -180,7 +216,8 @@ class Box(BubbleModel):
             return None
 
     def get_box_bubbles(self, z, Lbox=100., vox=1., Q=0.5,  R=5., sigma=0.5,
-        gamma=0., use_kdtree=True, allow_partial_ionization=False, seed=None):
+        gamma=0., use_kdtree=True, allow_partial_ionization=False, seed=None,
+        path='.'):
         """
         Make a 3-d realization of the bubble field.
 
@@ -219,6 +256,13 @@ class Box(BubbleModel):
         if cached_result is not None:
             print("Loaded box from cache.", args)
             return cached_result
+
+        box_disk = self.load_box(path=path, Q=Q, z=z, which_box='bubbles',
+            allow_partial_ionization=allow_partial_ionization,
+            seed=seed, Lbox=Lbox, vox=vox, R=R, sigma=sigma, gamma=gamma)
+
+        if box_disk is not None:
+            return box_disk
 
         assert vox == 1, "There's a bug for vox != 1 right now :("
 

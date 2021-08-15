@@ -27,15 +27,13 @@ _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
 _default_labels = {'Q': r'$Q$', 'R': r'$R$', 'Ts': r'$T_S$',
     'sigma': r'$\sigma$', 'gamma': r'$\gamma$'}
-_default_limits = {'Q': (-0.05, 1.05), 'R': (1e-1, 20),
+_default_limits = {'Q': (-0.05, 1.05), 'R': (3e-1, 30),
     'Ts': (1, 200),
-    'sigma': (0, 2), 'gamma': (-4, 1)}
+    'sigma': (0, 2), 'gamma': (-4, -2)}
 _default_z = np.arange(5, 20, 0.05)
-
 
 bbox = dict(facecolor='none', edgecolor='k', fc='w',
         boxstyle='round,pad=0.3', alpha=0.9, zorder=1000)
-
 
 class AnalyzeFit(object):
     def __init__(self, fn):
@@ -74,6 +72,54 @@ class AnalyzeFit(object):
                 labels.append(par)
 
         return labels
+
+    def check_model_ps(self, z=None, k=None, Ts=(0, np.inf), Q=(0, 1), R=(0, 100),
+        sigma=(0.5, 2), gamma=(-4, 0), skip=0):
+        """
+        Scroll through models in some specified corner of parameter space
+        and re-compute the power spectrum and plot it.
+        """
+
+        pars, redshifts = self.data['pinfo']
+        fchain = self.data['flatchain']
+
+        if np.unique(redshifts).size > 1:
+            assert z is not None, "Must supply `z` if multi-z fit."
+
+        limits = {'Ts': Ts, 'Q': Q, 'R': R, 'sigma': sigma, 'gamma': gamma}
+
+        if k is None:
+            k = np.logspace(-1, 0, 11)
+
+        for i in range(fchain.shape[0]):
+            if i < skip:
+                continue
+
+            kw = {par:fchain[i,j] for j, par in enumerate(pars)}
+            if self.data['kwargs']['Ts_log10']:
+                kw['Ts'] = 10**kw['Ts']
+
+            plot_it = True
+            for par in pars:
+                if limits[par][0] < kw[par] < limits[par][1]:
+                    continue
+
+                plot_it = False
+
+            if not plot_it:
+                continue
+
+            print('Generating model from chain link {} with kwargs={}'.format(i,
+                kw))
+            ps = self.model.get_ps_21cm(redshifts[0], k, **kw)
+
+            pl.loglog(k, k**3 * ps / 2. / np.pi**2)
+
+            input('<enter> for next model')
+            pl.clear()
+
+
+
 
     def plot_triangle(self, fig=1, axes=None, params=None, redshifts=None,
         complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
@@ -176,7 +222,7 @@ class AnalyzeFit(object):
                         del kw['colors']
                     if 'linestyles' in kw:
                         del kw['linestyles']
-                        
+
                     _ax.hist(p2, density=True, bins=bins[j], histtype='step', **kw)
 
                     if j > 0:
@@ -234,17 +280,13 @@ class AnalyzeFit(object):
 
         params, redshifts = self.data['pinfo']
 
-        nrows = len(self.model.params)
-
-        ncols = max(self.data['zfit'].size,
-            sum([par.startswith('Q') for par in params]))
+        nrows = len(params)
+        ncols = 1
+        _j = 0
 
         if ax is None:
             fig, axes = pl.subplots(nrows, ncols, num=fig,
-                figsize=(ncols * 4, nrows *4))
-
-            if ncols == 1:
-                axes = [[ax] for ax in axes]
+                figsize=(ncols * 4, nrows * 4))
 
         steps = np.arange(0, self.data['chain'].shape[1])
 
@@ -266,47 +308,36 @@ class AnalyzeFit(object):
 
             _z_ = redshifts[i]
 
-            # Special cases: parametric elements of model
-            if np.isinf(_z_):
+            try:
                 parname, parnum = par.split('_')
+            except ValueError:
+                parname = par
+                parnum = None
 
-                _i = self.model.params.index(parname)
-
-                _j = int(par[-1])
-                ylab = par.split('_')[0]
-
-                axes[_i][_j].annotate(par, (0.05, 0.95), bbox=bbox,
-                    xycoords='axes fraction', ha='left', va='top')
-
-            else:
-                _i = self.model.params.index(par)
-                _j = np.argmin(np.abs(zunique - _z_))
-                ylab = _default_labels[par]
-
-                axes[_i][_j].annotate(r'$z=%.2f$' % _z_, (0.05, 0.95),
-                    xycoords='axes fraction', ha='left', va='top',
-                    bbox=bbox)
+            axes[i].annotate(par, (0.05, 0.95), bbox=bbox,
+                xycoords='axes fraction', ha='left', va='top')
 
             chain = self.data['chain'][:,burn:,i]
 
-            axes[_i][_j].plot(steps, chain.T, **kwargs)
+            axes[i].plot(steps, chain.T, **kwargs)
 
             # Plot best one as horizontal line
-            axes[_i][_j].plot(steps,
+            axes[i].plot(steps,
                 chain[ibest[0],ibest[1]] * np.ones_like(steps), color='k',
                 ls='--', zorder=10, lw=3)
 
             # Put marker at walker/step where best happens
-            axes[_i][_j].scatter(steps[ibest[1]], chain[ibest[0],ibest[1]],
+            axes[i].scatter(steps[ibest[1]], chain[ibest[0],ibest[1]],
                 marker='|', s=150, color='k', zorder=10)
 
             if _j == 0:
-                axes[_i][_j].set_ylabel(ylab)
+                ylab = par.split('_')[0]
+                axes[i].set_ylabel(ylab)
 
         return axes
 
     def plot_ps(self, z=None, use_best=True, ax=None, fig=1,
-        conflevel=0.68, samples=None,
+        conflevel=0.68, samples=None, show_recovery=True,
         marker_kw={}, use_cbar=True, show_cbar=True, show_data=True, cmap='jet',
         burn=0, **kwargs):
         """
@@ -345,7 +376,9 @@ class AnalyzeFit(object):
             if use_cbar:
                 kwargs['color'] = cmap.to_rgba(_z_)
 
-            if use_best:
+            if not show_recovery:
+                continue
+            elif use_best:
                 ax.plot(data['kblobs'], data['blobs'][ibest[1],
                     ibest[0],i], **kwargs)
             elif samples is not None:
@@ -372,7 +405,8 @@ class AnalyzeFit(object):
                 if use_cbar:
                     marker_kw['color'] = cmap.to_rgba(_z_)
 
-                ax.errorbar(data['kblobs'], ydat, yerr.T, **marker_kw)
+                ax.errorbar(data['kblobs'], ydat, yerr.T, fmt='o',
+                    **marker_kw)
 
         ax.set_xlabel(labels['k'])
         ax.set_ylabel(labels['delta_sq'])
@@ -616,12 +650,12 @@ class AnalyzeFit(object):
                     for i, _z_ in enumerate(zplot):
                         conf = np.array([[0.16, 0.84]])
                         data = y[:,i]#np.concatenate((y[:,i], ybest[i]))
-                        ax.boxplot(data, positions=[_z_], showfliers=False,
+                        ax.boxplot(data, positions=[_z_],
+                            showfliers=False,
                             manage_ticks=False,
                             conf_intervals=conf)
                             #usermedians=[ybest[i]])
                             #conf_intervals=[[16, 84]])
-
 
                         if 'label' in kw:
                             del kw['label']
@@ -686,8 +720,6 @@ class AnalyzeFit(object):
         ax.set_xlim(min(self.data['zfit'])-1,
             max(self.data['zfit'])+1)
         ax.set_ylim(*_default_limits[par])
-
-
 
         return ax
 

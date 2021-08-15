@@ -402,12 +402,15 @@ class FitHelper(object):
 
             if kwargs['sigma_func'] is not None:
                 prefix += '_s{}'.format(kwargs['sigma_func'])
-            elif kwargs['sigma_const'] is not None:
+            elif (kwargs['sigma_const'] is not None) and \
+                (kwargs['bubbles_pdf'][0:4] == 'logn'):
                 prefix += '_sconst'
 
-            if kwargs['gamma_func'] is not None:
+            if (kwargs['gamma_func'] is not None):
                 prefix += '_g{}'.format(kwargs['gamma_func'])
-            elif kwargs['gamma_const'] is not None:
+
+            elif (kwargs['gamma_const'] is not None) and \
+                (kwargs['bubbles_pdf'][0:4] == 'plex'):
                 prefix += '_gconst'
 
             if kwargs['prior_tau']:

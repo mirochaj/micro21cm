@@ -913,7 +913,7 @@ class BubbleModel(object):
         pb.finish()
 
         if separate:
-            return P1, P2, Px
+            return P1, (1 - P1) * P2, P12
         else:
             if self.bubbles_model == 'fzh04':
                 return P1 + (1 - P1) * P2
@@ -1129,6 +1129,19 @@ class BubbleModel(object):
         Use "volume matching" to determine density level above which
         gas is ionized.
 
+        Parameters
+        ----------
+        self.use_volume_match : int
+            This is set at instantiation, and controls the smoothing scale
+            used to compute the variance in the density field. The main
+            options are:
+
+                1: smooth on scale where volume-weighted BSD V dn/dlogR
+                   peaks.
+                2: smooth on scale where volume-weighted BSD V dn/dR peaks.
+                3: smooth on scale where dn/dR peaks.
+
+
         Returns
         -------
         Both the density of bubbles and sigma_R of the density field
@@ -1160,19 +1173,17 @@ class BubbleModel(object):
             # find peak in V dn/dR
             Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 3:
-            Rsm = R
-        elif self.use_volume_match == 10:
+            if self.bubbles_via_Rpeak:
+                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+                Rsm = self.tab_R[np.argmax(bsd)]
+            else:
+                Rsm = R
+        elif self.use_volume_match == 4:
             bb1, bb2, bbx = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, separate=True)
             bb = bb1 + bb2
             P1_frac = bb1 / bb
-            Rsm = np.interp(0.75, P1_frac[-1::-1], self.tab_R[-1::-1])
-        elif self.use_volume_match == 11:
-            bb1, bb2, bbx = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, separate=True)
-            bb = bb1 + bb2
-            P2_frac = bb2 / bb
-            Rsm = np.interp(0.75, P2_frac, self.tab_R)
+            Rsm = np.interp(0.975, P1_frac[-1::-1], self.tab_R[-1::-1])
         else:
             raise NotImplemented('help')
 
@@ -1475,7 +1486,7 @@ class BubbleModel(object):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
     def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None, which_ps='bb',
-        free_norm=True, maxiter=100, xtol=1e-2, ftol=1e-3):
+        free_norm=True, maxiter=100, xtol=1e-2, ftol=1e-3, use_log=True):
         """
         Find the best-fit micro21cm representation of an input ionization
         power spectrum (presumably from 21cmFAST).
@@ -1512,7 +1523,11 @@ class BubbleModel(object):
 
         # Assume error scales as k
         #err = 0.1 * Dsq_in * (k_in / min(k_in))
-        func = lambda pars: np.sum((Dsq(pars) - Dsq_in)**2)
+        if use_log:
+            func = lambda pars: np.sum((np.log10(Dsq(pars)) - \
+                np.log10(Dsq_in))**2)
+        else:
+            func = lambda pars: np.sum((Dsq(pars) - Dsq_in)**2)
 
         _guess_ = 1.2 if self.bubbles_pdf == 'lognormal' else -2.5
 

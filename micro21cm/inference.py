@@ -167,6 +167,7 @@ fit_kwargs = \
  'include_rsd': 2,
 
  'restart': True,
+ 'burn': 0,
  'regroup_after': None,
  'steps': 100,
  'checkpoint': 10,

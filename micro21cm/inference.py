@@ -79,7 +79,7 @@ _guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
 _guesses_T_dpl = {'p0': (5., 20.), 'p1': (8, 20), 'p2': (3, 7),
     'p3': (-2.5, -1.5)}
-_guesses_T_pl = {'p0': (5., 50.), 'p1': (-8, -4)}
+_guesses_T_pl = {'p0': (5., 150.), 'p1': (-10, -2)}
 _guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl,
      'pl': _guesses_T_pl}
 
@@ -93,11 +93,11 @@ _guesses = {'R': _guesses_R, 'Q': _guesses_Q, 'Ts': _guesses_T,
 
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
 _priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
-_priors_Q_pl = {'p0': (0, 1), 'p1': (-10, 0)}
+_priors_Q_pl = {'p0': (0, 1), 'p1': (-20, 0)}
 _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl,
     'broad': _priors_broad['Q'], 'pl': _priors_Q_pl}
 
-_priors_R_pl = {'p0': (0, 30), 'p1': (-25, -1)}
+_priors_R_pl = {'p0': (0, 30), 'p1': (-25, 0)}
 _priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
 
 _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
@@ -105,7 +105,7 @@ _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
 _priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
 
 _priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 8), 'p3': (-6, 0)}
-_priors_T_pl = {'p0': (0, 1000), 'p1': (-10, 0)}
+_priors_T_pl = {'p0': (0, 1000), 'p1': (-20, 0)}
 _priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl,
     'pl': _priors_T_pl}
 _priors_g = {'broad': _priors_broad['gamma']}
@@ -165,7 +165,6 @@ fit_kwargs = \
  'bubbles_ion': 'ion',      # or 'hot' or False
  'bubbles_pdf': 'lognormal',
  'include_rsd': 2,
- 'Rfree': True,
 
  'restart': True,
  'regroup_after': None,
@@ -386,11 +385,6 @@ class FitHelper(object):
             if kwargs['R_func'] is not None:
                 prefix += '_R{}'.format(kwargs['R_func'])
             else:
-                if kwargs['Rfree']:
-                    prefix += '_vR'
-                else:
-                    prefix += '_vnb'
-
                 if kwargs['Rxdelta']:
                     prefix += '_vdR'
 

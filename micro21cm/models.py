@@ -1409,9 +1409,35 @@ class BubbleModel(object):
 
     def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
         xi_bb=None, **_kw_):
+        return self._get_ps_bx(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, xi_bb=xi_bb, which_ps='bb', **_kw_)
 
-        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            xi_bb=xi_bb)
+    def get_ps_bd(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
+        xi_bb=None, Ts=np.inf, **_kw_):
+        ps = self._get_ps_bx(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, xi_bb=xi_bb, which_ps='bd', **_kw_)
+
+        return ps / 2. / self.get_alpha(z, Ts)
+
+    def _get_ps_bx(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
+        xi_bb=None, which_ps='bb', **_kw_):
+
+        if which_ps == 'bb':
+            jp = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+                xi_bb=xi_bb)
+            avg = Q**2
+        elif which_ps == 'bd':
+            bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
+                self.get_cross_terms(z, separate=True, Q=Q, R=R,
+                    sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb, **_kw_)
+            jp = bd
+
+            d_i = self.get_bubble_density(z=z, Q=Q, R=R,
+                sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb, **_kw_)
+            avg = 0.0
+
+        else:
+            raise NotImplemented('help')
 
         if self.include_overlap_corr:
             corr = self.get_overlap_corr(0.0, Q=Q, R=R, sigma=sigma,
@@ -1420,23 +1446,23 @@ class BubbleModel(object):
         else:
             corr = 1.
 
-        cf_bb = (bb - Q**2) * corr
+        cf = (jp - avg) * corr
 
-        # == 0 causes problems
-        cf_bb[cf_bb == 0] = tiny_cf
+        # cf == 0 causes problems
+        cf[cf == 0] = tiny_cf
 
         # Setup interpolant
-        _fcf = interp1d(np.log(self.tab_R), cf_bb, kind='cubic',
+        _fcf = interp1d(np.log(self.tab_R), cf, kind='cubic',
             bounds_error=False, fill_value=tiny_cf)
         f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
         if type(k) != np.ndarray:
             k = np.array([k])
 
-        ps_bb = get_ps_from_cf(k, f_cf=f_cf,
+        ps = get_ps_from_cf(k, f_cf=f_cf,
             Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
-        return ps_bb
+        return ps
 
     def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
         gamma=0., alpha=0., xi_bb=None, delta_ion=0.):
@@ -1516,10 +1542,10 @@ class BubbleModel(object):
         if free_norm:
             ps = lambda pars: pars[2] \
                 * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
-                R=pars[0], sigma=pars[1], gamma=pars[1])
+                R=10**pars[0], sigma=pars[1], gamma=pars[1])
         else:
             ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
-                R=pars[0], sigma=pars[1], gamma=pars[1])
+                R=10**pars[0], sigma=pars[1], gamma=pars[1])
 
         Dsq = lambda pars: k_in**3 * ps(pars) / 2. / np.pi**2
 
@@ -1535,15 +1561,15 @@ class BubbleModel(object):
 
         # Use some intuition on guesses
         if Q <= 0.2:
-            guess = [1., _guess_]
+            guess = [-0.5, _guess_]
         elif Q < 0.5:
-            guess = [5., _guess_]
+            guess = [0.5, _guess_]
         elif Q < 0.7:
-            guess = [10., _guess_]
+            guess = [1., _guess_]
         elif Q < 0.9:
-            guess = [20., _guess_]
+            guess = [1.2, _guess_]
         else:
-            guess = [30., _guess_]
+            guess = [1.5, _guess_]
 
         if free_norm:
             guess.append(1.)
@@ -1552,7 +1578,7 @@ class BubbleModel(object):
 
         par = 'sigma' if self.bubbles_pdf == 'lognormal' else 'gamma'
 
-        kw = {'R': popt[0], par: popt[1]}
+        kw = {'R': 10**popt[0], par: popt[1]}
         if free_norm:
             kw['norm'] = popt[2]
 

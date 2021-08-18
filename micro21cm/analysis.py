@@ -124,7 +124,7 @@ class AnalyzeFit(object):
     def plot_triangle(self, fig=1, axes=None, params=None, redshifts=None,
         complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
         fill=False, nu=[0.95, 0.68], take_log=False, is_log=False,
-        skip=None, **kwargs):
+        skip=None, smooth=None, **kwargs):
         """
 
         """
@@ -240,6 +240,10 @@ class AnalyzeFit(object):
 
                 if contours:
                     hist, be2, be1 = np.histogram2d(p2, p1, [bins[j], bins[i]])
+
+                    if smooth is not None:
+                        hist = gaussian_filter(hist, smooth)
+
                     bc1 = bin_e2c(be1)
                     bc2 = bin_e2c(be2)
 
@@ -727,10 +731,13 @@ class AnalyzeFit(object):
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
 
-        burn_per_w = burn // self.data['blobs'].shape[1]
+        burn_per_w = burn // self.data['chain'].shape[1]
         x = np.arange(self.data['chain'].shape[1])
-        for i in range(self.data['blobs'].shape[1]):
+        for i in range(self.data['chain'].shape[0]):
             ax.plot(x, self.data['lnprob'][i,burn_per_w:], **kwargs)
+
+        ax.axhline(self.data['lnprob'][np.isfinite(self.data['lnprob'])].max(),
+            color='k', ls='--', lw=3, zorder=10)
 
         ax.set_xlabel('step number')
         ax.set_ylabel(r'$\log \mathcal{L}$')

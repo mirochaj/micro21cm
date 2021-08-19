@@ -1514,7 +1514,8 @@ class BubbleModel(object):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
     def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None, which_ps='bb',
-        free_norm=True, maxiter=100, xtol=1e-2, ftol=1e-3, use_log=True):
+        free_norm=True, maxiter=100, xtol=1e-2, ftol=1e-3, use_log=True,
+        R=None, sigma=None, gamma=None):
         """
         Find the best-fit micro21cm representation of an input ionization
         power spectrum (presumably from 21cmFAST).
@@ -1535,17 +1536,29 @@ class BubbleModel(object):
         elif which_ps == '21cm':
             func_ps = self.get_ps_21cm
             assert z is not None, "Must provide `z` for 21-cm PS!"
-            assert Ts is not None, "Must provide `Ts` for 21-cm PS!"
+
+            if R is None:
+                assert Ts is not None, "Must provide `Ts` for 21-cm PS!"
+
         else:
             raise NotImplemented('Help!')
 
+        fitting_Ts = False
         if free_norm:
             ps = lambda pars: pars[2] \
                 * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
                 R=10**pars[0], sigma=pars[1], gamma=pars[1])
         else:
-            ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
-                R=10**pars[0], sigma=pars[1], gamma=pars[1])
+            if (R is not None) and ((sigma is not None) or (gamma is not None)):
+                ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],
+                    R=R, sigma=sigma, gamma=gamma)
+
+                self._ps_ = ps
+                fitting_Ts = True
+                assert free_norm == False
+            else:
+                ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
+                    R=10**pars[0], sigma=pars[1], gamma=pars[1])
 
         Dsq = lambda pars: k_in**3 * ps(pars) / 2. / np.pi**2
 
@@ -1560,7 +1573,9 @@ class BubbleModel(object):
         _guess_ = 1.2 if self.bubbles_pdf == 'lognormal' else -2.5
 
         # Use some intuition on guesses
-        if Q <= 0.2:
+        if fitting_Ts:
+            guess = [np.log10(self.get_Tgas(z))]
+        elif Q <= 0.2:
             guess = [-0.5, _guess_]
         elif Q < 0.5:
             guess = [0.5, _guess_]
@@ -1576,10 +1591,13 @@ class BubbleModel(object):
 
         popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
 
-        par = 'sigma' if self.bubbles_pdf == 'lognormal' else 'gamma'
+        if fitting_Ts:
+            kw = {'Ts': 10**popt[0]}
+        else:
+            par = 'sigma' if self.bubbles_pdf == 'lognormal' else 'gamma'
 
-        kw = {'R': 10**popt[0], par: popt[1]}
-        if free_norm:
-            kw['norm'] = popt[2]
+            kw = {'R': 10**popt[0], par: popt[1]}
+            if free_norm:
+                kw['norm'] = popt[2]
 
         return kw

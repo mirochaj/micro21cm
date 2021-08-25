@@ -12,7 +12,7 @@ Description:
 
 import os
 import numpy as np
-from scipy.optimize import fmin
+from scipy.optimize import fmin, fsolve
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz, quad
 from scipy.special import erfcinv, erf, erfc
@@ -615,7 +615,7 @@ class BubbleModel(object):
             alpha=alpha)
 
         V_R = 4. * np.pi * self.tab_R**3 / 3.
-        V_o = self.get_overlap_vol(d, self.tab_R)
+        V_o = self.get_overlap_vol_arr(d)
 
         if which_vol == 'o':
             V = V_o
@@ -655,7 +655,7 @@ class BubbleModel(object):
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
-        V_o = self.get_overlap_vol(d, self.tab_R)
+        V_o = self.get_overlap_vol_arr(d)
 
         if exclusion:
             V = 4. * np.pi * self.tab_R**3 / 3.
@@ -690,7 +690,7 @@ class BubbleModel(object):
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
-        V_o = self.get_overlap_vol(d, self.tab_R)
+        V_o = self.get_overlap_vol_arr(d)
 
         V = 4. * np.pi * self.tab_R**3 / 3.
 
@@ -753,9 +753,28 @@ class BubbleModel(object):
         return PN**2
 
     @property
+    def tab_Vo_2d(self):
+        if not hasattr(self, '_tab_Vo_2d_'):
+            fn = '{}/input/overlap_vol_log10R_{:.1f}_{:.1f}_N_{:.0f}_2D.hdf5'.format(
+                PATH, np.log10(self.Rmin), np.log10(self.Rmax), self.NR)
+
+            if not os.path.exists('{}'.format(fn)):
+                self._tab_Vo_2d_ = np.zeros([self.NR, self.NR])
+                for i, d in enumerate(self.tab_R):
+                    tab_d = [self.get_overlap_vol(d, R) \
+                            for j, R in enumerate(self.tab_R)]
+                    self._tab_Vo_2d_[i,:] = np.array(tab_d)
+
+            else:
+                with h5py.File(fn, 'r') as f:
+                    self._tab_Vo_2d_ = np.array(f[('Vo')])
+
+        return self._tab_Vo_2d_
+
+    @property
     def tab_Vo_3d(self):
         if not hasattr(self, '_tab_Vo_3d_'):
-            fn = '{}/input/overlap_vol_log10R_{:.1f}_{:.1f}_N_{:.0f}.hdf5'.format(
+            fn = '{}/input/overlap_vol_log10R_{:.1f}_{:.1f}_N_{:.0f}_3D.hdf5'.format(
                 PATH, np.log10(self.Rmin), np.log10(self.Rmax), self.NR)
 
             if not os.path.exists('{}'.format(fn)):
@@ -769,6 +788,11 @@ class BubbleModel(object):
     def get_Vo_2d(self, d):
         k = np.argmin(np.abs(d - self.tab_R))
         return self.tab_Vo_3d[k]
+
+    def get_overlap_vol_arr(self, d):
+        tab = self.tab_Vo_2d
+        i = np.argmin(np.abs(d - self.tab_R))
+        return tab[i,:]
 
     def get_overlap_vol(self, d, R):
         """
@@ -928,12 +952,14 @@ class BubbleModel(object):
             exclusion=1) for RR in self.tab_R]
         P1e = np.array(P1e)
 
-        #bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+        P1 = [self.get_P1(RR, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha) \
+            for RR in self.tab_R]
+        P1 = np.array(P1)
 
         if separate:
             return P1e, (1. - Q)
         else:
-            return P1e * (1. - Q)
+            return (1 - P1) * P1e * (1. - Q)
 
     def get_dd(self, z, **_kw_):
         """
@@ -1515,18 +1541,33 @@ class BubbleModel(object):
 
     def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None, which_ps='bb',
         free_norm=True, maxiter=100, xtol=1e-2, ftol=1e-3, use_log=True,
-        R=None, sigma=None, gamma=None):
+        R=None, sigma=None, gamma=None, Ts_guess=None):
         """
-        Find the best-fit micro21cm representation of an input ionization
+        Find the best-fit micro21cm representation of an input
         power spectrum (presumably from 21cmFAST).
 
-        .. note :: Also useful for taking a log-normal BSD PS (ionization
+        .. note :: Useful for taking a log-normal BSD PS (ionization
             or 21-cm) and calibrating a different BSD's parameters.
 
         .. note :: Just minimizing the sum of squared difference between the
             input spectrum and our model.
 
         .. note :: For maxiter=100, this will take about ~1 minute in general.
+
+        Parameters
+        ----------
+        k_in : np.ndarray
+            Array of modes for input PS.
+        Dsq_in : np.ndarray
+            Dimensionless PS of whatever we're calibrating to.
+        Q : int, float
+            Global ionized fraction of input model.
+        which_ps : str
+            Can provide 'bb' if fitting to ionization power spectra, or
+            '21cm' if fitting to 21-cm PS.
+        R : int, float
+            If fitting 21-cm PS, can provide R (and sigma or gamma) to
+            just fit for the spin temperature.
 
         """
 
@@ -1543,18 +1584,20 @@ class BubbleModel(object):
         else:
             raise NotImplemented('Help!')
 
-        fitting_Ts = False
+        fitting_Ts = (R is not None) and \
+            ((sigma is not None) or (gamma is not None))
+
         if free_norm:
             ps = lambda pars: pars[2] \
                 * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
                 R=10**pars[0], sigma=pars[1], gamma=pars[1])
         else:
-            if (R is not None) and ((sigma is not None) or (gamma is not None)):
+            if fitting_Ts:
+                Tcmb = self.get_Tcmb(z)
+
                 ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],
                     R=R, sigma=sigma, gamma=gamma)
 
-                self._ps_ = ps
-                fitting_Ts = True
                 assert free_norm == False
             else:
                 ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
@@ -1574,7 +1617,10 @@ class BubbleModel(object):
 
         # Use some intuition on guesses
         if fitting_Ts:
-            guess = [np.log10(self.get_Tgas(z))]
+            if Ts_guess is None:
+                guess = [0.]
+            else:
+                guess = [Ts_guess]
         elif Q <= 0.2:
             guess = [-0.5, _guess_]
         elif Q < 0.5:
@@ -1589,10 +1635,18 @@ class BubbleModel(object):
         if free_norm:
             guess.append(1.)
 
-        popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
+        #popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
+        popt = fsolve(func, guess, maxfev=maxiter, xtol=ftol,
+            factor=0.1)
 
         if fitting_Ts:
-            kw = {'Ts': 10**popt[0]}
+            popt2 = fsolve(func, [np.log10(Tcmb *1.1)], maxfev=maxiter,
+                xtol=ftol, factor=0.1)
+        else:
+            popt2 = None
+
+        if fitting_Ts:
+            kw = {'Ts': 10**popt[0], 'Ts_hi': 10**popt2[0]}
         else:
             par = 'sigma' if self.bubbles_pdf == 'lognormal' else 'gamma'
 

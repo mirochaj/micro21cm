@@ -30,6 +30,7 @@ labels = \
  'delta_sq': r'$\overline{\delta T_b}^2 \Delta^2(k) \ [\mathrm{mK}^2]$',
  'delta_sq_long': r'$\overline{\delta T_b}^2 k^3 \left(\frac{P(k)}{2\pi^2}\right) \ [\mathrm{mK}^2]$',
  'delta_sq_xx': r'$\Delta_{xx}^2(k)$',
+ 'delta_sq_xd': r'$k^3 |P_{x\delta}| / 2 \pi^2$',
  'Ts': r'$T_S / \mathrm{K}$',
  'Q': r'$Q$',
  'Q_ion': r'$Q_{\mathrm{ion}}$',

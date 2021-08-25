@@ -124,7 +124,7 @@ class AnalyzeFit(object):
     def plot_triangle(self, fig=1, axes=None, params=None, redshifts=None,
         complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
         fill=False, nu=[0.95, 0.68], take_log=False, is_log=False,
-        skip=None, smooth=None, **kwargs):
+        skip=None, smooth=None, skip_params=None, **kwargs):
         """
 
         """
@@ -137,14 +137,19 @@ class AnalyzeFit(object):
         else:
             axes_by_row = axes
 
+        all_params, redshifts = self.data['pinfo']
+
         if params is None:
-            params, redshifts = self.data['pinfo']
+            params = all_params
         else:
             pass
 
         elements = range(len(params))
 
-        labels = self.get_labels(params, redshifts)
+        try:
+            labels = self.get_labels(params, redshifts)
+        except IndexError:
+            labels = [''] * len(params)
         Np = len(params)
 
         if type(bins) not in [list, tuple, np.ndarray]:
@@ -182,6 +187,18 @@ class AnalyzeFit(object):
                 else:
                     _ax = axes_by_row[i][j]
 
+                if skip_params is not None:
+                    if params[i] in skip_params:
+                        continue
+
+                    if params[j] in skip_params:
+                        continue
+
+                if params[i] not in all_params:
+                    continue
+                if params[j] not in all_params:
+                    continue
+
                 zsamplesi, samplesi = self.get_samples(params[i], burn)
                 zsamplesj, samplesj = self.get_samples(params[j], burn)
 
@@ -217,6 +234,7 @@ class AnalyzeFit(object):
 
                 # 1-D PDFs
                 if i == j:
+
                     kw = kwargs.copy()
                     if 'colors' in kw:
                         del kw['colors']

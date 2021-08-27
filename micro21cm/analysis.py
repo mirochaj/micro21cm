@@ -118,9 +118,6 @@ class AnalyzeFit(object):
             input('<enter> for next model')
             pl.clear()
 
-
-
-
     def plot_triangle(self, fig=1, axes=None, params=None, redshifts=None,
         complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
         fill=False, nu=[0.95, 0.68], take_log=False, is_log=False,

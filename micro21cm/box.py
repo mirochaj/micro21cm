@@ -164,39 +164,40 @@ class Box(BubbleModel):
         Create a density box using Steven Murray's `powerbox` package.
         """
 
-        box_disk = self.load_box(z=z, Lbox=Lbox, vox=box, which_box='density')
+        box_disk = self.load_box(z=z, Lbox=Lbox, vox=vox, which_box='density')
 
         if box_disk is not None:
             return box_disk
 
         power = lambda k: self.get_ps_matter(z=z, k=k)
 
-        Npix = Lbox / vox
-        rho = pbox.LogNormalpowerbox(N=Npix, dim=3, pk=power,
+        Npix = int(Lbox / vox)
+        assert Lbox / vox % 1 == 0
+        rho = pbox.LogNormalPowerBox(N=Npix, dim=3, pk=power,
             boxlength=Lbox).delta_x()
 
         return rho
 
     def get_box_21cm(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
         R=5., sigma=0.5, gamma=0., use_kdtree=True, path='.',
-        allow_partial_ionization=True):
+        allow_partial_ionization=True, seed=None):
 
         box_disk = self.load_box(path=path, Q=Q, z=z, which_box='21cm',
             allow_partial_ionization=allow_partial_ionization,
-            seeds=seeds, Lbox=Lbox, vox=vox)
+            seed=seed, Lbox=Lbox, vox=vox)
 
         if box_disk is not None:
             return box_disk
 
-        xHI, Nb = self.get_box_bubbles(z, Lbox=Lbox, vox=vox, Q=Q, Ts=Ts,
-            R=R, sigma=sigma, gamma=gamma, use_kdtree=use_kdtree,
+        xHI, Nb = self.get_box_bubbles(z, Lbox=Lbox, vox=vox, Q=Q,
+            R=R, sigma=sigma, gamma=gamma, use_kdtree=use_kdtree, seed=seed,
             allow_partial_ionization=allow_partial_ionization)
 
         # Set bulk IGM temperature
-        T0 = box * self.get_dTb_bulk(z, Ts=Ts)
+        T0 = self.get_dTb_bulk(z, Ts=Ts)
 
         # Density box, no correlation with bubble box.
-        rho = self.get_box_density(z, Npix, Lbox)
+        rho = self.get_box_density(z, vox, Lbox)
 
         # Brightness temperature box
         dTb = T0 * xHI * (1. + rho)

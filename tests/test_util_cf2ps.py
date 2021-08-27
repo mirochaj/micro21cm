@@ -20,12 +20,13 @@ def test():
     fig, axes = pl.subplots(1, 3, figsize=(15,5))
 
     R = np.logspace(-2, 3, 1000)
+    z = 8.
     k = 1. / R
 
     model = micro21cm.BubbleModel()
 
     cf_mm = micro21cm.util.get_cf_from_ps(R, lambda kk: model.get_ps_matter(7.9, kk))
-    ps_mm = model.get_ps_matter(7.9, k)
+    ps_mm = model.get_ps_matter(z, k)
 
     # Compare PS and CF
     axes[0].loglog(k, ps_mm)
@@ -42,7 +43,9 @@ def test():
     axes[1].loglog(k, ps_mm * k**3 / 2. / np.pi**2)
     axes[1].loglog(k, ps_rec * k**3 / 2. / np.pi**2, ls='--', label='recovered')
 
+    pl.savefig('{!s}.png'.format(__file__[0:__file__.rfind('.')]))
+    pl.close()
+
 
 if __name__ == '__main__':
     test()
-    

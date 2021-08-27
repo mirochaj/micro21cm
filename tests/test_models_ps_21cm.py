@@ -21,10 +21,13 @@ def test():
     k = np.logspace(-1., 0, 21)
 
     # Compute P(k)
-    ps = model.get_ps_21cm(z=8., k=k, Ts=3., Q=0.5, R=3., sigma=0.3)
+    ps = model.get_ps_21cm(z=8., k=k, Ts=3., Q=0.5, R=3., sigma=1)
 
     # Plot dimensionless power spectrum
     pl.loglog(k, k**3 * ps / 2. / np.pi**2)
+
+    pl.savefig('{!s}.png'.format(__file__[0:__file__.rfind('.')]))
+    pl.close()
 
 if __name__ == '__main__':
     test()

@@ -128,6 +128,9 @@ class BubbleModel(object):
             self._tab_user_R, self._tab_user_bsd = bubbles_pdf
             assert self._tab_user_bsd.shape == self._tab_user_R.shape
             self.bubbles_pdf = 'user'
+            self.Rmin = self._tab_user_R.min()
+            self.Rmax = self._tab_user_R.max()
+            self.NR = self._tab_user_R.size
 
         self.bubbles = bubbles
         self.bubbles_ion = bubbles_ion
@@ -937,7 +940,7 @@ class BubbleModel(object):
         pb.finish()
 
         if separate:
-            return P1, (1 - P1) * P2, P12
+            return P1, (1 - P1) * P2#, P12
         else:
             if self.bubbles_model == 'fzh04':
                 return P1 + (1 - P1) * P2
@@ -945,8 +948,7 @@ class BubbleModel(object):
                 return P1 * (1 - P12) + P2 \
                      + P12 + P22
 
-    def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
-        separate=False, **_kw_):
+    def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., **_kw_):
 
         P1e = [self.get_P1(RR, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
             exclusion=1) for RR in self.tab_R]
@@ -956,10 +958,15 @@ class BubbleModel(object):
             for RR in self.tab_R]
         P1 = np.array(P1)
 
-        if separate:
-            return P1e, (1. - Q)
-        else:
-            return (1 - P1) * P1e * (1. - Q)
+        P_bn = (1 - P1) * P1e * (1. - Q)
+
+        P_bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+        d_i = self.get_bubble_density(z, Q=Q, R=R, sigma=sigma,
+            gamma=gamma, alpha=alpha)
+
+        ceil = P_bb * 2 * (2. * d_i - 1) * (1 - Q) / d_i / Q
+        #print(d_i, ceil, P_bn)
+        return P_bn#np.minimum(P_bn, ceil)
 
     def get_dd(self, z, **_kw_):
         """
@@ -1206,7 +1213,7 @@ class BubbleModel(object):
                 Rsm = R
         elif int(self.use_volume_match) == 4:
             frac = self.use_volume_match % 4
-            bb1, bb2, bbx = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, separate=True)
             bb = bb1 + bb2
             P1_frac = bb1 / bb

@@ -906,7 +906,10 @@ class BubbleModel(object):
         """
 
         if Q == 0 or (not self.bubbles):
-            return np.zeros_like(self.tab_R)
+            if separate:
+                return np.zeros_like(self.tab_R), np.zeros_like(self.tab_R)
+            else:
+                return np.zeros_like(self.tab_R)
 
         pb = ProgressBar(self.tab_R.size, use=self.use_pbar,
             name="<bb'>(z={})".format(z))
@@ -1292,7 +1295,7 @@ class BubbleModel(object):
         _alpha = self.get_alpha(z, Ts)
         #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
         beta_phi, beta_mu = self.get_betas(z, Ts)
-        beta_sq = (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
+        #beta_sq = (beta_mu**2 + beta_phi**2 + 2 * beta_mu * beta_phi)
 
         if not self.include_cross_terms:
             d_i = 0
@@ -1326,32 +1329,14 @@ class BubbleModel(object):
             bbdd = bb * d_i**2
         elif self.include_cross_terms == 3:
             bd = d_i * bb + d_n * bn
-            bd_1pt = bbd = bbdd = np.zeros_like(self.tab_R)
-            bdd = d_i * d_i * bb + d_i * d_n * bn
+            bd_1pt = bbd = bbdd = bdd = np.zeros_like(self.tab_R)
+            #bdd = d_i * d_i * bb + d_i * d_n * bn
         else:
             raise NotImplemented('Only know include_cross_terms=1,2,3!')
 
-        # RSDs
-        # In all of these approaches, we're doing the average over \mu
-        # here straight-away.
-        #if self.include_rsd == 1:
-        #    corr1 = (1. + beta_phi + self.get_rsd_int_mu2(self.include_mu_gt))
-        #    corr2 = beta_sq
-        #elif self.include_rsd == 2:
-        #    mu_sq_avg = np.sqrt(self.get_rsd_boost_dd(-1) - 1)
-        #    corr1 = (1. + beta_phi + mu_sq_avg)
-        #    corr2 = (1. + beta_phi + mu_sq_avg)**2
-        #elif self.include_rsd == 3:
-        #    mu_sq_avg = 1.
-        #    corr1 = (1. + beta_phi + mu_sq_avg)
-        #    corr2 = (1. + beta_phi + mu_sq_avg)**2
-        #else:
-        #    corr1 = 1. + beta_phi
-        #    corr2 = (1. + beta_phi)**2
-#
-        #bd *= corr1
-        #bdd *= corr2
-        #bbdd *= corr2
+        tot = 2 * _alpha * bd + 2 * _alpha**2 * bbd + 2 * _alpha * bdd \
+            + _alpha**2 * bbdd \
+            - 2 * _alpha**2 * Q * bd_1pt -_alpha**2 * bd_1pt**2
 
         if separate:
             return 2 * _alpha * bd, 2 * _alpha**2 * bbd, 2 * _alpha * bdd, \
@@ -1433,8 +1418,11 @@ class BubbleModel(object):
                 alpha=alpha, delta_ion=delta_ion, separate=True)
 
         bd *= (beta_mu + beta_phi)
-        bdd *= (beta_mu + beta_phi)**2
-        bbdd *= (beta_mu + beta_phi)**2
+        #bbd *= (beta_mu + beta_phi)
+        bdd *= (beta_mu + beta_phi)
+        #bbdd *= (beta_mu + beta_phi)**2
+        #bd_1pt *= (beta_mu + beta_phi)
+        #bbd_1pt *= (beta_mu + beta_phi)
 
         cf_21 += bd + bbd + bdd + bbdd + bbd_1pt + bd_1pt
 
@@ -1642,9 +1630,9 @@ class BubbleModel(object):
         if free_norm:
             guess.append(1.)
 
-        #popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
-        popt = fsolve(func, guess, maxfev=maxiter, xtol=ftol,
-            factor=0.1)
+        popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
+        #popt = fsolve(func, guess, maxfev=maxiter, xtol=ftol,
+        #    factor=0.1)
 
         if fitting_Ts:
             popt2 = fsolve(func, [np.log10(Tcmb *1.1)], maxfev=maxiter,

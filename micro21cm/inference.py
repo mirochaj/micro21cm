@@ -74,16 +74,16 @@ _guesses_Q_pl = {'p0': (0.25, 0.75), 'p1': (-8, 0)}
 _guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl,
     'broad': _guesses_broad['Q'], 'pl': _guesses_Q_pl}
 
-_guesses_R_pl = {'p0': (1., 5.), 'p1': (-10., -20.)}
+_guesses_R_pl = {'p0': (0.5, 10.), 'p1': (-5., -20.)}
 _guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
 _guesses_T_dpl = {'p0': (5., 20.), 'p1': (8, 20), 'p2': (3, 7),
     'p3': (-2.5, -1.5)}
-_guesses_T_pl = {'p0': (5., 150.), 'p1': (-10, -2)}
+_guesses_T_pl = {'p0': (1., 40.), 'p1': (-10, 3.)}
 _guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl,
      'pl': _guesses_T_pl}
 
-_guesses_s_pl = {'p0': (0.3, 0.6), 'p1': (-0.5, 0.5)}
+_guesses_s_pl = {'p0': (0.3, 1.5), 'p1': (-0.5, 0.5)}
 _guesses_s = {'pl': _guesses_s_pl, 'broad': _guesses_broad['sigma']}
 
 _guesses_g = {'broad': _guesses_broad['gamma']}
@@ -105,7 +105,7 @@ _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
 _priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
 
 _priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 8), 'p3': (-6, 0)}
-_priors_T_pl = {'p0': (0, 1000), 'p1': (-20, 0)}
+_priors_T_pl = {'p0': (0, 1000), 'p1': (-20, 5)}
 _priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl,
     'pl': _priors_T_pl}
 _priors_g = {'broad': _priors_broad['gamma']}

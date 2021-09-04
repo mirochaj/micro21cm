@@ -25,7 +25,7 @@ def test():
 
     model = micro21cm.BubbleModel()
 
-    cf_mm = micro21cm.util.get_cf_from_ps(R, lambda kk: model.get_ps_matter(7.9, kk))
+    cf_mm = micro21cm.util.get_cf_from_ps(R, lambda kk: model.get_ps_matter(z, kk))
     ps_mm = model.get_ps_matter(z, k)
 
     # Compare PS and CF

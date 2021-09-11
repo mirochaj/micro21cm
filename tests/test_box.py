@@ -31,7 +31,7 @@ def test(Lbox=100):
 
     # Check that the bubble filling factor is consistent.
     print("Q box: {:.3f}".format(1. - box.sum() / float(box.size)))
-    print("Q mod: {:.3f}".format(bubble_kw['Q']))
+    print("Q mod: {:.3f}".format(kw['Q']))
 
     pmid = box.shape[0] // 2
 

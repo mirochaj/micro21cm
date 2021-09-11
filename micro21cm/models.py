@@ -1095,8 +1095,9 @@ class BubbleModel(object):
             gamma=gamma, alpha=0.0, kmin=kmin, kmax=kmax, dlogk=dlogk,
             rtol=rtol, atol=atol)
 
-    def get_variance_21cm(self, z, r, Q=0.5, R=5., sigma=0.5, gamma=None,
-        alpha=0.0, kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5, atol=1e-5):
+    def get_variance_21cm(self, z, r, Q=0.5, R=5., Ts=np.inf, sigma=0.5,
+        gamma=None, alpha=0.0, kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5,
+        atol=1e-5):
         """
         Return the variance in the ionization field at redshift `z` when
         smoothing on scale `r`.

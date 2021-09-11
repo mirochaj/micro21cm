@@ -23,7 +23,7 @@ fn2d = 'overlap_vol_log10R_{:.1f}_{:.1f}_N_{:.0f}_2D.hdf5'.format(
     np.log10(model.Rmin), np.log10(model.Rmax), model.NR)
 
 if os.path.exists(fn2d):
-    raise IOError('{} exists!'.format(fn))
+    raise IOError('{} exists!'.format(fn2d))
 
 print("Will save overlap volume lookup tables to {} and {}".format(fn3d, fn2d))
 

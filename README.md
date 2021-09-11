@@ -1,7 +1,8 @@
 # micro21cm
 model-independent constraints on reionization from observations of the 21-cm background
 
-![test suite](https://github.com/mirochaj/micro21cm/actions/workflows/test_suite.yml/badge.svg)
+.. image:: https://github.com/mirochaj/micro21cm/workflows/Tests/badge.svg
+    :target: https://github.com/mirochaj/micro21cm
 
 ## Dependencies
 

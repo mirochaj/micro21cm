@@ -15,10 +15,6 @@ import numpy as np
 
 
 def test():
-    # Setup 2-panel plot (one panel / band)
-    fig, ax = pl.subplots(1, 1)
-    fig.subplots_adjust(wspace=0.3)
-
     k = np.logspace(-2, 1, 100)
 
     igm = micro21cm.BubbleModel()

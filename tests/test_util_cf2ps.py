@@ -17,8 +17,6 @@ from scipy.interpolate import interp1d
 
 def test():
 
-    fig, axes = pl.subplots(1, 3, figsize=(15,5))
-
     R = np.logspace(-2, 3, 1000)
     z = 8.
     k = 1. / R
@@ -28,24 +26,13 @@ def test():
     cf_mm = micro21cm.util.get_cf_from_ps(R, lambda kk: model.get_ps_matter(z, kk))
     ps_mm = model.get_ps_matter(z, k)
 
-    # Compare PS and CF
-    axes[0].loglog(k, ps_mm)
-    axes[2].loglog(R, np.abs(cf_mm))
-
     # Recover PS from CF
-    _fcf = interp1d(np.log(R), cf_mm, kind='cubic', bounds_error=False, fill_value=0)
+    _fcf = interp1d(np.log(R), cf_mm, kind='cubic', bounds_error=False,
+        fill_value=0)
     f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
     ps_rec = micro21cm.util.get_ps_from_cf(k, f_cf, Rmin=R.min(), Rmax=R.max())
-    axes[0].loglog(k, ps_rec, ls='--', label='recovered')
-    axes[0].legend()
-
-    axes[1].loglog(k, ps_mm * k**3 / 2. / np.pi**2)
-    axes[1].loglog(k, ps_rec * k**3 / 2. / np.pi**2, ls='--', label='recovered')
-
-    pl.savefig('{!s}.png'.format(__file__[0:__file__.rfind('.')]))
-    pl.close()
-
+    
 
 if __name__ == '__main__':
     test()

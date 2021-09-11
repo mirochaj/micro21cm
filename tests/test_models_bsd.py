@@ -23,13 +23,5 @@ def test():
 
     fig, ax = pl.subplots(1, 1)
 
-    ax.loglog(model_logn.tab_R, bsd_logn * model_logn.tab_R**4)
-    ax.loglog(model_plex.tab_R, bsd_plex * model_plex.tab_R**4)
-    ax.set_ylim(1e-8, 1e-1)
-
-    pl.savefig('{!s}.png'.format(__file__[0:__file__.rfind('.')]))
-    pl.close()
-
-
 if __name__ == '__main__':
     test()

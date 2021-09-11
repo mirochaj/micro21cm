@@ -34,15 +34,6 @@ def test():
         P_mm = igm.get_ps_matter(z, k)
         D_sq_mm = k**3 * P_mm / 2. / np.pi**2
 
-        ax.loglog(k, D_sq_mm, label=r'$z={}$'.format(z))
-
-    ax.set_xlabel(micro21cm.labels['k'])
-    ax.set_ylabel(micro21cm.labels['delta_sq'])
-    ax.set_ylim(1e-5, 1e1)
-    ax.legend()
-
-    pl.savefig('{!s}.png'.format(__file__[0:__file__.rfind('.')]))
-    pl.close()
 
 if __name__ == '__main__':
     test()

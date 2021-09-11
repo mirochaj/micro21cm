@@ -35,14 +35,6 @@ def test(Lbox=100):
 
     pmid = box.shape[0] // 2
 
-    # Plot the 21-cm field [thin 20 Mpc projection]
-    fig1, ax1 = pl.subplots(1, 1, num=1)
-    ax1.imshow(box[pmid-10:pmid+11].mean(axis=0).T, origin='lower',
-        extent=(0, Lbox, 0, Lbox))
-
-    pl.savefig('{!s}_1.png'.format(__file__[0:__file__.rfind('.')]))
-    pl.close()
-
     # Compare the power spectra computed from the bubble model to the one obtained
     # from the 3-d realization.
     #p_box, k_box = pbox.get_power(dTb, Lbox, ignore_zero_mode=True)

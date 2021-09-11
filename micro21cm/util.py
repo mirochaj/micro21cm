@@ -13,8 +13,8 @@ Description:
 import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import griddata
-from scipy.fft import fftn as scipy_fftn
-from scipy.fft import ifftn as scipy_ifftn
+from scipy.fftpack import fftn as scipy_fftn
+from scipy.fftpack import ifftn as scipy_ifftn
 
 try:
     import progressbar

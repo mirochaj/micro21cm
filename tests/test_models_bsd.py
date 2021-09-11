@@ -21,7 +21,5 @@ def test():
     bsd_logn = model_logn.get_bsd(Q=0.1, R=2., sigma=0.5)
     bsd_plex = model_plex.get_bsd(Q=0.1, R=2., gamma=-3.5)
 
-    fig, ax = pl.subplots(1, 1)
-
 if __name__ == '__main__':
     test()

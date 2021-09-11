@@ -13,7 +13,6 @@ Description:
 import micro21cm
 import numpy as np
 import powerbox as pbox
-import matplotlib.pyplot as pl
 
 # Model parameters to explore
 z = 8.

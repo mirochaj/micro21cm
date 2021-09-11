@@ -12,7 +12,6 @@ Description:
 
 import micro21cm
 import numpy as np
-import matplotlib.pyplot as pl
 
 kw = {'R': 5., 'sigma': 1., 'Q': 0.5}
 

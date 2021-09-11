@@ -12,7 +12,6 @@ Description:
 
 import micro21cm
 import numpy as np
-import matplotlib.pyplot as pl
 from scipy.interpolate import interp1d
 
 def test():
@@ -32,7 +31,7 @@ def test():
     f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
     ps_rec = micro21cm.util.get_ps_from_cf(k, f_cf, Rmin=R.min(), Rmax=R.max())
-    
+
 
 if __name__ == '__main__':
     test()

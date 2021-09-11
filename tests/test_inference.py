@@ -12,4 +12,9 @@ Description:
 
 import micro21cm
 import numpy as np
-import matplotlib.pyplot as pl
+
+def test():
+    pass
+
+if __name__ == '__main__':
+    test()

@@ -19,7 +19,7 @@ from matplotlib.colors import LogNorm, Normalize
 from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, double_power_law, \
-    extract_params
+    extract_params, power_law_lognorm
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
@@ -620,6 +620,8 @@ class AnalyzeFit(object):
             elif fname == 'pl':
                 if _par_ == 'Q':
                     func = power_law_max1
+                elif _par_ == 'Ts':
+                    func = power_law_lognorm
                 else:
                     func = power_law
             elif fname == 'bpl':
@@ -667,7 +669,7 @@ class AnalyzeFit(object):
                 if boxplot:
                     kw = kwargs.copy()
                     for i, _z_ in enumerate(zplot):
-                        conf = np.array([[0.16, 0.84]])
+                        conf = np.array([[_lo / 100., _hi / 100.]])
                         data = y[:,i]#np.concatenate((y[:,i], ybest[i]))
                         ax.boxplot(data, positions=[_z_],
                             showfliers=False,

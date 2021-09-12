@@ -719,7 +719,7 @@ class BubbleModel(object):
         return P2 * corr
 
     def get_PN(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
-        xi_bb=0., use_corr=True, N=1):
+        xi_bb=0., use_corr=True, N=1): # pragma: no cover
         """
         Experimental treatment of 'overlap' component of P2.
         """
@@ -775,7 +775,7 @@ class BubbleModel(object):
         return self._tab_Vo_2d_
 
     @property
-    def tab_Vo_3d(self):
+    def tab_Vo_3d(self): # pragma: no cover
         if not hasattr(self, '_tab_Vo_3d_'):
             fn = '{}/input/overlap_vol_log10R_{:.1f}_{:.1f}_N_{:.0f}_3D.hdf5'.format(
                 PATH, np.log10(self.Rmin), np.log10(self.Rmax), self.NR)

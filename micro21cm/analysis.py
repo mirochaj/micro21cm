@@ -35,7 +35,7 @@ _default_z = np.arange(5, 20, 0.05)
 bbox = dict(facecolor='none', edgecolor='k', fc='w',
         boxstyle='round,pad=0.3', alpha=0.9, zorder=1000)
 
-class AnalyzeFit(object):
+class AnalyzeFit(object): # pragma: no cover
     def __init__(self, fn):
         self.fn = fn
 

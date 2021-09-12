@@ -12,14 +12,13 @@ Description:
 
 import micro21cm
 import numpy as np
-import powerbox as pbox
 
 # Model parameters to explore
 z = 8.
 Ts = 3.
 kw = {'Q': 0.1, 'R': 2.5, 'sigma': 1}
 
-def test(Lbox=100):
+def test(Lbox=50):
 
     # Initialize bubble model
     model = micro21cm.Box()
@@ -29,17 +28,10 @@ def test(Lbox=100):
     box, box_tot = model.get_box_bubbles(z=z, Lbox=Lbox, **kw)
 
     # Check that the bubble filling factor is consistent.
-    print("Q box: {:.3f}".format(1. - box.sum() / float(box.size)))
-    print("Q mod: {:.3f}".format(kw['Q']))
+    Q_box = 1. - box.sum() / float(box.size)
 
-    pmid = box.shape[0] // 2
+    assert abs(Q_box - kw['Q']) < 0.05
 
-    # Compare the power spectra computed from the bubble model to the one obtained
-    # from the 3-d realization.
-    #p_box, k_box = pbox.get_power(dTb, Lbox, ignore_zero_mode=True)
-
-    ## Compute the ratio of the solutions. Interpolate to common k grid first.
-    #ratio = p_mic / np.interp(k_mic, k_box, p_box)
 
 if __name__ == '__main__':
     test()

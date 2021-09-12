@@ -11,6 +11,7 @@ exclude_lines =
     # Don't complain if tests don't hit defensive assertion code:
     raise ImportError
     raise NotImplementedError
+    raise NotImplemented
     except ImportError
     except NotImplementedError
 

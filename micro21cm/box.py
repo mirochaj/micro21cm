@@ -366,7 +366,7 @@ class Box(BubbleModel):
 
     def plot_variance_vs_Q(self, Qarr=None, Rsm=1, R=5., sigma=1., gamma=0.,
         Lbox=100., vox=1., seed=None, fig=1, ax=None, show_random=True,
-        show_analytic=True, allow_partial_ionization=False, **kwargs):
+        show_analytic=True, allow_partial_ionization=False, **kwargs): # pragma: no cover
 
         has_ax = True
         if ax is None:
@@ -422,7 +422,7 @@ class Box(BubbleModel):
 
 
     def plot_variance_vs_scale(self, box, Rsm=None, rescale=1., fig=1, ax=None,
-        show_random=True, **kwargs):
+        show_random=True, **kwargs): # pragma: no cover
         """
         Plot the variance of a box vs. smoothing scale.
         """
@@ -467,7 +467,7 @@ class Box(BubbleModel):
 
     def plot_Qint_vs_Q(self, Qarr=None, R=5., sigma=1., gamma=0.,
         Lbox=100., vox=1., seed=None, fig=1, ax=None,
-        allow_partial_ionization=False, **kwargs):
+        allow_partial_ionization=False, **kwargs): # pragma: no cover
 
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
@@ -511,7 +511,7 @@ class Box(BubbleModel):
 
     def plot_Q(self, Qarr=None, Rsm=1, R=5., sigma=1., gamma=0.,
         Lbox=100., vox=1., seed=None, fig=1, ax=None,
-        allow_partial_ionization=False, **kwargs):
+        allow_partial_ionization=False, **kwargs): # pragma: no cover
 
         if ax is None:
             fig, ax = pl.subplots(1, 1, num=fig)
@@ -550,7 +550,7 @@ class Box(BubbleModel):
         return ax
 
     def plot_Pbb_vs_Q(self, Qarr=None, karr=None, R=5., sigma=1., gamma=0.0,
-        Lbox=100., vox=1., seed=None, fig=1, ax=None):
+        Lbox=100., vox=1., seed=None, fig=1, ax=None): # pragma: no cover
         """
         Compare power spectra of analytic model to that derived from a box.
         """

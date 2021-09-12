@@ -41,4 +41,11 @@ jobs:
     - name: Test with pytest
       run: |
         pytest --cov-config=.coveragerc --cov=micro21cm --cov-report=xml -v tests/*.py
-    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v2
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.xml
+        fail_ci_if_error: false
+        name: codecov-micro21cm
+        verbose: true

@@ -41,9 +41,4 @@ jobs:
     - name: Test with pytest
       run: |
         pytest --cov-config=.coveragerc --cov=micro21cm --cov-report=xml -v tests/*.py
-    - uses: codecov/codecov-action@v1.5.2
-        if: matrix.os == 'ubuntu-latest' && success() && !contains(github.event.pull_request.labels.*.name, 'auto-pr')
-        with:
-          file: ./coverage.xml # optional
-          fail_ci_if_error: true
-          verbose: true
+    

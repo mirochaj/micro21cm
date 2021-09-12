@@ -1,4 +1,6 @@
-# micro21cm
+=========
+micro21cm
+=========
 model-independent constraints on reionization from observations of the 21-cm background
 
 .. image:: https://github.com/mirochaj/micro21cm/workflows/Tests/badge.svg

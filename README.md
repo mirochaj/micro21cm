@@ -2,9 +2,7 @@
 
 model-independent constraints on reionization from observations of the 21-cm background
 
-![Tests](https://github.com/mirochaj/micro21cm/actions/workflows/test_suite.yaml/badge.svg)    
-[![codecov](https://codecov.io/gh/mirochaj/micro21cm/branch/main/graph/badge.svg?token=18ZMZEUWPW)](https://codecov.io/gh/mirochaj/micro21cm)
-
+![Tests](https://github.com/mirochaj/micro21cm/actions/workflows/test_suite.yaml/badge.svg) [![codecov](https://codecov.io/gh/mirochaj/micro21cm/branch/main/graph/badge.svg?token=18ZMZEUWPW)](https://codecov.io/gh/mirochaj/micro21cm)
 
 ## Dependencies
 

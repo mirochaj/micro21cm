@@ -288,87 +288,6 @@ class BubbleModel(object):
                     np.log10(self.Rmax), self.NR)
         return self._tab_R
 
-    def _get_R_from_nb(self, n_b, Q=0.0, sigma=0.5, gamma=0., alpha=0.,
-        Qtol=1e-6, maxiter=10000, **_kw_):
-        """
-        Compute the characteristic bubble size needed to obtain the supplied
-        number density of bubbles, n_b.
-
-        .. note :: Used to have option self.bubbles_Rfree, which, if False,
-            would use n_b as the free parameter throughout, instead of R. This
-            functionality has since been retired (07.30.2021), but I've left
-            this routine in just in case it's useful to translate between
-            R and n_b.
-
-        """
-        # Need to do this iteratively.
-
-        if not hasattr(self, '_cache_R'):
-            self._cache_R = {}
-
-        # Cache
-        if (Q, sigma, gamma, alpha, n_b, Qtol) in self._cache_R.keys():
-            return self._cache_R[(Q, sigma, gamma, alpha, n_b, Qtol)]
-
-        logRarr = np.log(self.tab_R)
-
-        # Initial guess for bubble size
-        logR = np.log(2.)
-        R = np.exp(logR)
-        logRhist = []
-
-        logRstep = 0.1
-
-        # Iterate until we achieve requested Q.
-        ct = 0
-        while ct < maxiter:
-            logRhist.append(logR)
-
-            _bsd = self._get_bsd_unnormalized(Q=Q, R=np.exp(logR),
-                sigma=sigma, gamma=gamma, alpha=alpha)
-
-            # Normalize bsd so we get requested `n_b`
-            norm = n_b / np.trapz(_bsd * self.tab_R, x=np.log(self.tab_R))
-            _bsd *= norm
-
-            # Compute Q
-            V = 4. * np.pi * self.tab_R**3 / 3.
-            integ = np.trapz(_bsd * V * self.tab_R, x=np.log(self.tab_R))
-
-            _Q_ = 1. - np.exp(-integ)
-
-            if abs(Q - _Q_) < Qtol:
-                break
-
-            # If we're just flip-flopping and not converging, make step
-            # size smaller
-            if ct % 4 == 0:
-                if np.unique(logRhist[-4:]).size == 2:
-                    logRstep *= 0.5
-
-            # Update guess, try again
-            if _Q_ > Q:
-                logR -= logRstep
-            else:
-                logR += logRstep
-
-            ct += 1
-
-        # This shouldn't ever happen but throw a warning if we hit `maxiter`.
-        if ct == maxiter:
-            print("WARNING: maxiter={} reached for Q={}, n_b={}, sigma={}".format(
-                maxiter, Q, n_b, sigma
-            ))
-            print("(actual Q={})".format(_Q_))
-
-        # Little kludge to ensure we get Q exactly in LS limit? Dep. on Qtol.
-        #bsd *= Q / _Q_
-
-        # Once we find the right bubble size, cache and return.
-        self._cache_R[(Q, sigma, gamma, alpha, n_b, Qtol)] = np.exp(logR)
-
-        return self._cache_R[(Q, sigma, gamma, alpha, n_b, Qtol)]
-
     def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.):
         """
         Return an unnormalized version of the bubble size distribution.
@@ -561,7 +480,7 @@ class BubbleModel(object):
         return np.trapz(pdf * self.tab_R, x=np.log(self.tab_R))
 
     def get_overlap_corr(self, d, Q=0.0, R=5., sigma=0.5, gamma=0.,
-        alpha=0.0, exclusion=0, method=0, which_vol='o'):
+        alpha=0.0, exclusion=0, method=0, which_vol='o'): # pragma: no cover
 
         if 0 < method < 1:
             suppression = method
@@ -612,7 +531,7 @@ class BubbleModel(object):
         return np.minimum(corr, 1.) * suppression
 
     def get_intersectional_vol(self, d, Q=0., R=5., sigma=0.5, gamma=0.,
-        alpha=0., which_vol='o', **_kw_):
+        alpha=0., which_vol='o', **_kw_): # pragma: no cover
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -635,11 +554,11 @@ class BubbleModel(object):
         return integ1 - (1. - np.exp(-integ2))
 
     def get_Qint(self, d, Q=0., R=5., sigma=0.5, gamma=0.,
-        alpha=0., which_vol='tot', **_kw_):
+        alpha=0., which_vol='tot', **_kw_): # pragma: no cover
         return self.get_intersectional_vol(d, Q=Q, R=R, sigma=sigma,
             gamma=gamma, alpha=alpha, which_vol=which_vol, **_kw_)
 
-    def get_Qtot(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0):
+    def get_Qtot(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.0): # pragma: no cover
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
 
@@ -995,45 +914,45 @@ class BubbleModel(object):
         self._cache_dd_[z] = dd
         return dd
 
-    def get_bd(self, z, Q=0.0, R=5., sigma=0.5, alpha=0., bbar=1,
-        bhbar=1, **_kw_):
-        """
-        Get the cross correlation function between bubbles and density,
-        equivalent to <bd'>.
-        """
-
-        dd = self.get_dd(z)
-
-        Rdiffabs=np.abs(self.Rarr - R)
-        Rindex = Rdiffabs.argmin()
-
-
-        fact =  bbar * bhbar * Q * dd
-
-        xbar=Q
-        #true formula is (1-xbar) = exp(-Q)
-#        xbar= 1 - np.exp(-Q)
-
-
-        bd = (1-xbar) * fact
-        bd[self.Rarr <  R] = (1-xbar) *(1.0 - np.exp(fact[Rindex]) )
-        #R is characteristic bubble size
-
-
-        return bd
-
-    def Rd(self, z, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0., bbar=1, bhbar=1):
-        """
-        Normalize the cross correlation
-
-        """
-
-        bd = self.get_bd(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            bbar=bbar, bhbar=bhbar)
-        dd = self.get_dd(z)
-        bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-
-        return (bd/np.sqrt(bb*dd))
+    #def get_bd(self, z, Q=0.0, R=5., sigma=0.5, alpha=0., bbar=1,
+    #    bhbar=1, **_kw_):
+    #    """
+    #    Get the cross correlation function between bubbles and density,
+    #    equivalent to <bd'>.
+    #    """
+#
+    #    dd = self.get_dd(z)
+#
+    #    Rdiffabs=np.abs(self.Rarr - R)
+    #    Rindex = Rdiffabs.argmin()
+#
+#
+    #    fact =  bbar * bhbar * Q * dd
+#
+    #    xbar=Q
+    #    #true formula is (1-xbar) = exp(-Q)
+#   #     xbar= 1 - np.exp(-Q)
+#
+#
+    #    bd = (1-xbar) * fact
+    #    bd[self.Rarr <  R] = (1-xbar) *(1.0 - np.exp(fact[Rindex]) )
+    #    #R is characteristic bubble size
+#
+#
+    #    return bd
+#
+    #def Rd(self, z, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0., bbar=1, bhbar=1):
+    #    """
+    #    Normalize the cross correlation
+#
+    #    """
+#
+    #    bd = self.get_bd(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+    #        bbar=bbar, bhbar=bhbar)
+    #    dd = self.get_dd(z)
+    #    bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+#
+    #    return (bd/np.sqrt(bb*dd))
 
     def get_variance(self, z, r, field, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
         gamma=0., alpha=0., xi_bb=None, kmin=1e-5, kmax=1e5, dlogk=0.05,
@@ -1203,19 +1122,19 @@ class BubbleModel(object):
                 bsd = bsd / Q
                 # find peak in V dn/dlnR
                 Rsm = self.tab_R[np.argmax(bsd)]
-        elif self.use_volume_match == 2:
+        elif self.use_volume_match == 2: # pragma: no cover
             bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
             # weight by volume
             bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
             # find peak in V dn/dR
             Rsm = self.tab_R[np.argmax(bsd)]
-        elif self.use_volume_match == 3:
+        elif self.use_volume_match == 3: # pragma: no cover
             if self.bubbles_via_Rpeak:
                 bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
                 Rsm = self.tab_R[np.argmax(bsd)]
             else:
                 Rsm = R
-        elif int(self.use_volume_match) == 4:
+        elif int(self.use_volume_match) == 4: # pragma: no cover
             frac = self.use_volume_match % 4
             bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, separate=True)

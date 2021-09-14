@@ -20,14 +20,17 @@ def test():
     igm = micro21cm.BubbleModel()
 
     # Plot the limits first
+    P_mm = np.inf
     for z in [6, 10, 15]:
 
         # This is the power + 2-sigma for each k
         #ax = plot_limits(band, ax=axes[band], color='k', fmt='o')
 
         # Compute the matter power spectrum at relevant redshift
-        P_mm = igm.get_ps_matter(z, k)
-        D_sq_mm = k**3 * P_mm / 2. / np.pi**2
+        P_mm_z = igm.get_ps_matter(z, k)
+
+        assert np.all(P_mm_z < P_mm)
+        P_mm = P_mm_z
 
 
 if __name__ == '__main__':

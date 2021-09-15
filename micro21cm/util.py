@@ -133,7 +133,7 @@ def smooth_box(box, R=2, kernel='tophat', periodic=False):
 
     return scipy_ifftn(_box * _fil)
 
-class ProgressBar(object):
+class ProgressBar(object): # pragma: no cover
     def __init__(self, maxval, name='micro21cm', use=True, width=80):
         self.maxval = maxval
         self.use = use

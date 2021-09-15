@@ -32,6 +32,14 @@ def test(Lbox=50):
 
     assert abs(Q_box - kw['Q']) < 0.05
 
+    box_sm1 = micro21cm.util.smooth_box(box, R=1, periodic=True).real
+    var1 = np.std(box_sm1.ravel())**2
+
+    box_sm2 = micro21cm.util.smooth_box(box, R=2, periodic=True).real
+    var2 = np.std(box_sm2.ravel())**2
+
+    assert var2 < var1
+
 
 if __name__ == '__main__':
     test()

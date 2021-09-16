@@ -38,7 +38,7 @@ class Box(BubbleModel):
         """
         BubbleModel.__init__(self, **kwargs)
 
-    def get_box_path(self, Q, z=None, which_box='bubble',
+    def get_box_path(self, Q, z=None, which_box='bubbles',
         allow_partial_ionization=0, path='.', Lbox=100., vox=1., **kwargs):
 
         path = '{}/boxes_R_{:.1f}'.format(path, kwargs['R'])
@@ -56,13 +56,13 @@ class Box(BubbleModel):
 
         return path
 
-    def get_box_name(self, Q, which_box='bubble', Lbox=100, vox=1., seed=None):
+    def get_box_name(self, Q, which_box='bubbles', Lbox=100, vox=1., seed=None):
         fn = 'box_{}_L{:.0f}_v_{:.1f}_Q_{:.2f}_seed_{}'.format(which_box,
             Lbox, vox, Q, seed)
 
         return fn
 
-    def generate_boxes(self, Q, z=None, which_box='bubble',
+    def generate_boxes(self, Q, z=None, which_box='bubbles',
         allow_partial_ionization=0, path='.',
         seeds=None, Lbox=100., vox=1., clobber=False, **kwargs):
         """
@@ -135,7 +135,7 @@ class Box(BubbleModel):
         pb.finish()
 
     def load_box(self, path='.', Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., use_kdtree=True, which_box='bubble',
+        R=5., sigma=0.5, gamma=0., use_kdtree=True, which_box='bubbles',
         allow_partial_ionization=True, z=None, seed=None):
 
         path = self.get_box_path(Q, z=z, which_box=which_box,
@@ -218,7 +218,7 @@ class Box(BubbleModel):
 
     def get_box_bubbles(self, z, Lbox=100., vox=1., Q=0.5,  R=5., sigma=0.5,
         gamma=0., use_kdtree=True, allow_partial_ionization=False, seed=None,
-        path='.'):
+        path='.', **_kw_):
         """
         Make a 3-d realization of the bubble field.
 
@@ -348,7 +348,7 @@ class Box(BubbleModel):
         return box, box_tot
 
     def get_box_rand(self, box=None, Lbox=100., vox=1., Q=0.5, Qtol=1e-2,
-        seed=None):
+        seed=None, **_kw_):
 
         if box is None:
             Npix = int(Lbox / vox)

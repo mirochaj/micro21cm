@@ -198,7 +198,7 @@ def get_cmd_line_kwargs(argv):
 
     return cmd_line_kwargs
 
-def split_by_sign(x, y):
+def split_by_sign(x, y): # pragma: no cover
     """
     Split apart an array into its positive and negative chunks.
     """
@@ -224,7 +224,7 @@ def Tgadiabaticfit(z):
 #fit to Tgas(z) adiabatically cooling in LCDM, in K. Good to 3% in z=6-50 (for exponent=2 good within 10%)
     return 9.5 * ((1+z)/(21.))**1.95
 
-def bin_e2c(bins):
+def bin_e2c(bins): # pragma: no cover
     """
     Convert bin edges to bin centers.
     """
@@ -234,7 +234,7 @@ def bin_e2c(bins):
 
     return 0.5 * (bins[1:] + bins[:-1])
 
-def bin_c2e(bins):
+def bin_c2e(bins): # pragma: no cover
     """
     Convert bin centers to bin edges.
     """
@@ -244,7 +244,7 @@ def bin_c2e(bins):
 
     return np.concatenate(([bins[0] - 0.5 * dx], bins + 0.5 * dx))
 
-def get_error_2d(x, y, z, bins, nu=[0.95, 0.68], weights=None, method='raw'):
+def get_error_2d(x, y, z, bins, nu=[0.95, 0.68], weights=None, method='raw'): # pragma: no cover
     """
     Find 2-D contour given discrete samples of posterior distribution.
 
@@ -283,7 +283,7 @@ def get_error_2d(x, y, z, bins, nu=[0.95, 0.68], weights=None, method='raw'):
 
     return nu, levels
 
-def _error_2D_crude(L, nu=[0.95, 0.68]):
+def _error_2D_crude(L, nu=[0.95, 0.68]): # pragma: no cover
     """
     Integrate outward at "constant water level" to determine proper
     2-D marginalized confidence regions.

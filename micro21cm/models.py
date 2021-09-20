@@ -1502,7 +1502,7 @@ class BubbleModel(object):
         fitting_Ts = (R is not None) and \
             ((sigma is not None) or (gamma is not None))
 
-        if free_norm:
+        if free_norm and (not fitting_Ts):
             ps = lambda pars: pars[2] \
                 * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
                 R=10**pars[0], sigma=pars[1], gamma=pars[1])
@@ -1512,8 +1512,6 @@ class BubbleModel(object):
 
                 ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],
                     R=R, sigma=sigma, gamma=gamma)
-
-                assert free_norm == False
             else:
                 ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
                     R=10**pars[0], sigma=pars[1], gamma=pars[1])

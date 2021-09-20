@@ -48,7 +48,6 @@ def test():
     assert helper.tab_k.size == 2
     assert helper.pinfo[0] == ['Ts', 'Q', 'R', 'sigma']
 
-
     def loglikelihood(pars):
 
         blobs = -np.inf * np.ones((helper.fit_z.size, helper.tab_k.size))

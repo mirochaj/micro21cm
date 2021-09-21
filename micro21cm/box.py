@@ -11,6 +11,7 @@ Description: Make 3-d realizations of our bubble model.
 """
 
 import os
+import pickle
 import numpy as np
 import matplotlib.pyplot as pl
 from .models import BubbleModel
@@ -24,8 +25,9 @@ except ImportError:
 
 try:
     import h5py
+    have_h5py = True
 except ImportError:
-    pass
+    have_h5py = False
 
 class Box(BubbleModel):
     """
@@ -119,6 +121,9 @@ class Box(BubbleModel):
                 + self.get_box_name(_Q_, which_box=which_box, Lbox=Lbox, vox=vox) \
                 + '.hdf5'
 
+            if not have_h5py:
+                fn = fn.replace('hdf5', 'pkl')
+
             if os.path.exists(fn) and (not clobber):
                 print("Found box {}. Moving on...".format(fn))
                 continue
@@ -127,8 +132,12 @@ class Box(BubbleModel):
                 allow_partial_ionization=allow_partial_ionization, seed=seeds[i],
                 **kwargs)
 
-            with h5py.File(fn, 'w') as f:
-                f.create_dataset(which_box, data=box)
+            if have_h5py:
+                with h5py.File(fn, 'w') as f:
+                    f.create_dataset(which_box, data=box)
+            else:
+                with open(fn, 'wb') as f:
+                    pickle.dump(box, f)
 
             print("Wrote {}.".format(fn))
 
@@ -147,9 +156,16 @@ class Box(BubbleModel):
                 seed=seed) \
             + '.hdf5'
 
+        if not have_h5py:
+            fn = fn.replace('hdf5', 'pkl')
+
         if os.path.exists(fn):
-            with h5py.File(fn, 'r') as f:
-                data = np.array(f[(which_box)])
+            if have_h5py:
+                with h5py.File(fn, 'r') as f:
+                    data = np.array(f[(which_box)])
+            else:
+                with open(fn, 'rb') as f:
+                    data = pickle.load(f)
 
             print("Read box from {}.".format(fn))
 

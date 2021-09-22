@@ -41,6 +41,7 @@ class BubbleModel(object):
         include_P1=True, include_P2=True,
         include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
+        method_Pbn=1,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
@@ -150,6 +151,7 @@ class BubbleModel(object):
         self.use_volume_match = use_volume_match
         self.approx_linear = approx_linear
         self.density_pdf = density_pdf
+        self.method_Pbn = method_Pbn
 
         self.params = ['Ts', 'Q']
         if self.bubbles:
@@ -885,12 +887,12 @@ class BubbleModel(object):
         Get the probability that one point is ionized and the other is neutral.
         """
 
+        P1 = self.get_P1(d, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+            exclusion=0)
         P1e = self.get_P1(d, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
             exclusion=1)
 
-        P_bn = P1e * (1 - P1e)
-
-        return P_bn
+        return P1e * (1 - P1e) * (1 - P1)
 
     def get_dd(self, z, **_kw_):
         """

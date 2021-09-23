@@ -56,10 +56,11 @@ def test():
     ps_bd = model_logn.get_ps_bd(z, k, Q=0.1, R=2., sigma=1)
 
     assert np.all(ps_bb > ps_bd)
+
+    # Make sure we recover the input characteristic bubble size
     kw = model_logn.calibrate_ps(k, k**3 * ps_bb / 2. / np.pi**2, Q=0.1, z=z,
-        which_ps='bb', xtol=1e-2)
-    assert (abs(kw['R'] - 2.) < 1e-1) and (abs(kw['sigma'] - 1.) < 1e-1), \
-        print(kw['R'], kw['sigma'])
+        which_ps='bb', xtol=1e-2, sigma=1., free_norm=False)
+    assert (abs(kw['R'] - 2.) < 1e-1), 'Recovered R={}'.format(kw['R'])
 
 if __name__ == '__main__':
     test()

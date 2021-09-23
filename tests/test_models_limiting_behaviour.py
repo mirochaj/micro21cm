@@ -21,10 +21,12 @@ def test():
 
     P1 = [model.get_P1(RR, **kw) for RR in model.tab_R]
     P2 = [model.get_P2(RR, **kw) for RR in model.tab_R]
+    P_bn = [model.get_Pbn(RR, **kw) for RR in model.tab_R]
 
     # Test limiting behaviour. Should this work better?
     assert np.allclose(kw['Q'], P1[0]+P2[0], rtol=0, atol=1e-3)
     assert np.allclose(kw['Q']**2, P1[-1]+P2[-1], rtol=0, atol=1e-3)
+    assert np.allclose(kw['Q'] * (1. - kw['Q']), P_bn[-1], rtol=0, atol=1e-3)
 
 if __name__ == '__main__':
     test()

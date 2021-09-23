@@ -42,7 +42,7 @@ class BubbleModel(object):
         include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
-        Rmin=1e-2, Rmax=1e3, NR=1000, zrange=None,
+        Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
         use_pbar=False, approx_linear=True, **_kw_):
@@ -867,25 +867,27 @@ class BubbleModel(object):
                 return P1 * (1 - P12) + P2 \
                      + P12 + P22
 
-    def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., **_kw_):
+    def get_bn(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
+        **_kw_):
+        """
+        Get the <bn'> for all scales in self.tab_R by looping over `get_Pbn`.
+        """
 
-        P1e = [self.get_P1(RR, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+        Pbn = [self.get_Pbn(RR, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
             exclusion=1) for RR in self.tab_R]
-        P1e = np.array(P1e)
+        return np.array(Pbn)
 
-        P1 = [self.get_P1(RR, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha) \
-            for RR in self.tab_R]
-        P1 = np.array(P1)
+    def get_Pbn(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., **_kw_):
+        """
+        Get the probability that one point is ionized and the other is neutral.
+        """
 
-        P_bn = (1 - P1) * P1e * (1. - Q)
+        P1 = self.get_P1(d, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+            exclusion=0)
+        P1e = self.get_P1(d, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
+            exclusion=1)
 
-        P_bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-        d_i = self.get_bubble_density(z, Q=Q, R=R, sigma=sigma,
-            gamma=gamma, alpha=alpha)
-
-        ceil = P_bb * 2 * (2. * d_i - 1) * (1 - Q) / d_i / Q
-        #print(d_i, ceil, P_bn)
-        return P_bn#np.minimum(P_bn, ceil)
+        return P1e * (1 - P1e) * (1 - P1)
 
     def get_dd(self, z, **_kw_):
         """
@@ -1063,7 +1065,6 @@ class BubbleModel(object):
         integrand_full = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
             * 4. * np.pi * k**2 / (2. * np.pi)**3
 
-
         kcrit = 1. / R
         norm = 1. / integrand_full(kcrit)
 
@@ -1159,7 +1160,7 @@ class BubbleModel(object):
         else:
             w = np.sqrt(np.log(var_R + 1.))
 
-        # Eq. 33
+        # Eq. 42 (as of Sep 21, 2021)
         x_thresh = np.sqrt(2) * w * erfcinv(2 * Q)
 
         return x_thresh, w

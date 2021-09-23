@@ -17,7 +17,7 @@ import numpy as np
 def test():
     k = np.logspace(-2, 1, 100)
 
-    igm = micro21cm.BubbleModel()
+    model = micro21cm.BubbleModel()
 
     # Plot the limits first
     P_mm = np.inf
@@ -27,10 +27,13 @@ def test():
         #ax = plot_limits(band, ax=axes[band], color='k', fmt='o')
 
         # Compute the matter power spectrum at relevant redshift
-        P_mm_z = igm.get_ps_matter(z, k)
+        P_mm_z = model.get_ps_matter(z, k)
 
         assert np.all(P_mm_z < P_mm)
         P_mm = P_mm_z
+
+    # Verify that we recover sigma_8
+    s8 = model.get_variance_mm(z=0., r=8.)
 
 
 if __name__ == '__main__':

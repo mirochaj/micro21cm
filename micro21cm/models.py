@@ -42,9 +42,9 @@ class BubbleModel(object):
         include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
-        Rmin=1e-2, Rmax=1e4, NR=1000,
+        Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
-        transfer_kmax=500., transfer_k_per_logint=11, zmax=20.,
+        transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
         use_pbar=False, approx_linear=True, **_kw_):
         """
         Make a simple bubble model of the IGM.
@@ -107,6 +107,11 @@ class BubbleModel(object):
             real-space ensemble averages. Units: cMpc / h.
         NR : int
             Number of grid points to use between Rmin and Rmax.
+        zrange: list, tuple, np.ndarray
+            List of redshifts used to pre-compute matter PS. Will interpolate
+            between redshifts after. Note that this doesn't matter a ton as
+            long as the redshifts of interest are contained the provided range,
+            as the only cost is overhead. By default, will span 0 <= z <= 15.
 
 
         Cosmology
@@ -150,6 +155,7 @@ class BubbleModel(object):
         self.use_volume_match = use_volume_match
         self.approx_linear = approx_linear
         self.density_pdf = density_pdf
+        self.zrange = zrange
 
         self.params = ['Ts', 'Q']
         if self.bubbles:
@@ -171,6 +177,7 @@ class BubbleModel(object):
              'k_per_logint': transfer_k_per_logint,
              'kmax': transfer_kmax,
              'extrap_kmax': True,
+             'zmin': zmin,
              'zmax': zmax,
             }
 
@@ -181,29 +188,24 @@ class BubbleModel(object):
              'H0': little_h * 100.,
              'ombh2': omega_b * little_h**2,
              'omch2': omega_cdm * little_h**2,
-             'w': -1,
-             'lmax': 10000,
             }
 
+        self._ns = ns
+
     def _init_cosmology(self):
-
-        transfer_pars = camb.model.TransferParams(**self.transfer_params)
-
-        # Should setup the cosmology more carefully.
-        self._cosmo_ = camb.set_params(WantTransfer=True,
-            Transfer=transfer_pars, **self.cosmo_params)
-
-        if self.approx_linear:
-            nonlin = camb.model.NonLinear_none
-        else:
-            nonlin = camb.model.NonLinearModel
-
-        #self._cosmo_.set_matter_power(redshifts=self._redshifts,
-        #    nonlinear=nonlin)
-
-        # `P` method of `matter_ps` is function of (z, k)
-        self._matter_ps_ = camb.get_matter_power_interpolator(self._cosmo_,
-            nonlinear=self._cosmo_.NonLinear, **self.transfer_params)
+        kmax = self.transfer_params['kmax']
+        k_per_logint = self.transfer_params['k_per_logint']
+        zs = self.zrange if self.zrange is not None else [0,5,8,10,12,15]
+        pars = camb.CAMBparams()
+        pars.set_cosmology(**self.cosmo_params)
+        pars.InitPower.set_params(ns=self._ns)
+        pars.WantTransfer = True
+        pars.set_matter_power(redshifts=zs, kmax=kmax,
+            k_per_logint=k_per_logint, silent=True)
+        results = camb.get_results(pars)
+        self._matter_ps_ = results.get_matter_power_interpolator(nonlinear=False)
+        self._camb_results = results
+        self._cosmo_ = pars
 
     @property
     def cosmo(self):
@@ -247,11 +249,6 @@ class BubbleModel(object):
         """
         if not hasattr(self, '_matter_ps_'):
             self._init_cosmology()
-
-        #self.cosmo.set_matter_power(redshifts=[z], kmax=k.max())
-        #results = camb.get_results(self.cosmo)
-
-        #kh, z, pk = results.get_matter_power_spectrum(minkh=k.min(), maxkh=k.max(), npoints=k.size)
 
         return self._matter_ps_.P(z, k)
 
@@ -957,11 +954,14 @@ class BubbleModel(object):
     #    return (bd/np.sqrt(bb*dd))
 
     def get_variance(self, z, r, field, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
-        gamma=0., alpha=0., xi_bb=None, kmin=1e-5, kmax=1e5, dlogk=0.05,
+        gamma=0., alpha=0., xi_bb=None, kmin=1e-5, kmax=None, dlogk=0.05,
         rtol=1e-5, atol=1e-5):
         """
         Compute the variance of some `field`.
         """
+
+        if kmax is None:
+            kmax = self.transfer_params['kmax']
 
         # CAMB already sets of an interpolant for the matter PS, so
         # we can skip straight to integrating over window function.
@@ -995,7 +995,7 @@ class BubbleModel(object):
 
         return var
 
-    def get_variance_mm(self, z, r, kmin=1e-5, kmax=1e5, dlogk=0.05,
+    def get_variance_mm(self, z, r, kmin=1e-5, kmax=None, dlogk=0.05,
         rtol=1e-5, atol=1e-5):
         """
         Return the variance in the matter field at redshift `z` when
@@ -1006,7 +1006,7 @@ class BubbleModel(object):
             rtol=rtol, atol=atol)
 
     def get_variance_bb(self, z, r, Q=0.5, R=5., sigma=0.5, gamma=None,
-        alpha=0.0, kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5, atol=1e-5):
+        alpha=0.0, kmin=1e-5, kmax=None, dlogk=0.05, rtol=1e-5, atol=1e-5):
         """
         Return the variance in the ionization field at redshift `z` when
         smoothing on scale `r`.
@@ -1017,7 +1017,7 @@ class BubbleModel(object):
             rtol=rtol, atol=atol)
 
     def get_variance_21cm(self, z, r, Q=0.5, R=5., Ts=np.inf, sigma=0.5,
-        gamma=None, alpha=0.0, kmin=1e-5, kmax=1e5, dlogk=0.05, rtol=1e-5,
+        gamma=None, alpha=0.0, kmin=1e-5, kmax=None, dlogk=0.05, rtol=1e-5,
         atol=1e-5):
         """
         Return the variance in the ionization field at redshift `z` when
@@ -1028,7 +1028,7 @@ class BubbleModel(object):
             gamma=gamma, alpha=alpha, Ts=Ts, kmin=kmin, kmax=kmax, dlogk=dlogk,
             rtol=rtol, atol=atol)
 
-    def get_variance_from_ps(self, ps, R, kmin=1e-5, kmax=1e5, rtol=1e-5,
+    def get_variance_from_ps(self, ps, R, kmin=1e-5, kmax=None, rtol=1e-5,
         atol=1e-2):
         """
         Compute variance of generic field from input power spectrum.
@@ -1052,6 +1052,9 @@ class BubbleModel(object):
         Variance!
 
         """
+
+        if kmax is None:
+            kmax = self.transfer_params['kmax']
 
         ikw = dict(epsrel=rtol, epsabs=atol, limit=10000, full_output=1)
         Pofk = ps

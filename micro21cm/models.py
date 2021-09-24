@@ -40,7 +40,7 @@ class BubbleModel(object):
         include_adiabatic_fluctuations=True,
         include_P1=True, include_P2=True,
         include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
-        include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
+        include_cross_terms=2, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
@@ -940,18 +940,21 @@ class BubbleModel(object):
 #
     #    return bd
 #
-    #def Rd(self, z, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0., bbar=1, bhbar=1):
-    #    """
-    #    Normalize the cross correlation
-#
-    #    """
-#
-    #    bd = self.get_bd(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-    #        bbar=bbar, bhbar=bhbar)
-    #    dd = self.get_dd(z)
-    #    bb = self.get_bb(z, Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-#
-    #    return (bd/np.sqrt(bb*dd))
+    def get_r_of_k(self, z, k, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0.,
+        bbar=1, bhbar=1):
+        """
+        Compute the cross-correlation coefficient between ionization and
+        density fields.
+        """
+
+        p_bb = self.get_ps_bb(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+        p_dd = self.get_ps_mm(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+        p_bd = self.get_ps_bd(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+
+        return p_bd / np.sqrt(p_bb * p_dd)
 
     def get_variance(self, z, r, field, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
         gamma=0., alpha=0., xi_bb=None, kmin=1e-5, kmax=None, dlogk=0.05,
@@ -1229,21 +1232,19 @@ class BubbleModel(object):
         else:
             d_i = delta_ion
 
-        d_n = -d_i * Q / (1. - Q)
+        if Q < 1:
+            d_n = -d_i * Q / (1. - Q)
+        else:
+            d_i = d_n = 0.0
 
         # Currently neglects terms containing b and b' (other than <bb'>)
         if self.include_cross_terms == 0:
-            bd = np.zeros_like(self.tab_R)
+            bd = bd_1pt = bbd = bdd = bbdd = np.zeros_like(self.tab_R)
             bd_1pt = np.zeros_like(self.tab_R)
             bbd = np.zeros_like(self.tab_R)
-            bdd = Q * dd
-            bbdd = bb * dd
         elif self.include_cross_terms == 1:
             bd = d_i * bb + d_n * bn
-            bd_1pt = np.zeros_like(self.tab_R)
-            bbd = np.zeros_like(self.tab_R)
-            bdd = Q * dd
-            bbdd = Q**2 * dd
+            bd_1pt = bbd = bdd = bbdd = np.zeros_like(self.tab_R)
         elif self.include_cross_terms == 2:
             bd = d_i * bb + d_n * bn
             bd_1pt = d_i * Q
@@ -1253,8 +1254,12 @@ class BubbleModel(object):
             bbdd = bb * d_i**2
         elif self.include_cross_terms == 3:
             bd = d_i * bb + d_n * bn
-            bd_1pt = bbd = bbdd = bdd = np.zeros_like(self.tab_R)
+            bd_1pt = bbd = bdd = bbdd = np.zeros_like(self.tab_R)
+            bdd = d_i * d_i * bb + d_i * d_n * bn#Q * dd
+            #bd_1pt = d_i * Q
             #bdd = d_i * d_i * bb + d_i * d_n * bn
+            #bbdd = np.zeros_like(self.tab_R)
+            bbdd = bb * dd
         else:
             raise NotImplemented('Only know include_cross_terms=1,2,3!')
 

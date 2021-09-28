@@ -157,7 +157,7 @@ class BubbleModel(object):
         self.density_pdf = density_pdf
         self.zrange = zrange
 
-        self.params = ['Ts', 'Q']
+        self.params = ['Q', 'Ts']
         if self.bubbles:
             self.params.append('R')
 
@@ -171,6 +171,9 @@ class BubbleModel(object):
                 pass
             else:
                 raise NotImplemented('Dunno BSD {}'.format(self.bubbles_pdf))
+
+        self.params.append('Asys')
+        assert self.params[0] == 'Q', "Don't change this!"
 
         self.transfer_params = \
             {
@@ -1309,10 +1312,13 @@ class BubbleModel(object):
         return beta_p, np.sqrt(beta_mu_sq)
 
     def get_cf_21cm(self, z, Q=0.0, Ts=np.inf, R=5., sigma=0.5, gamma=0.,
-        alpha=0., xi_bb=None, delta_ion=0.):
+        alpha=0., Asys=1, xi_bb=None, delta_ion=0.):
+        """
+        Compute the 21-cm correlation function.
+        """
 
         bb = 1 * self.get_bb(z, Q, R=R, sigma=sigma, alpha=alpha, gamma=gamma,
-            xi_bb=xi_bb)
+            Asys=Asys, xi_bb=xi_bb)
         dd = 1 * self.get_dd(z)
         _alpha = self.get_alpha(z, Ts)
 
@@ -1336,13 +1342,13 @@ class BubbleModel(object):
 
         dd *= (beta_mu + beta_phi)**2
 
-        cf_21 = bb * _alpha**2 + dd - avg_term
+        cf_21 = dd + (bb * _alpha**2 - avg_term) * Asys
 
         bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
             self.get_cross_terms(z, Q=Q, Ts=Ts, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, delta_ion=delta_ion, separate=True)
 
-        bd *= (beta_mu + beta_phi)
+        bd *= (beta_mu + beta_phi) * np.sqrt(Asys)
         #bbd *= (beta_mu + beta_phi)
         bdd *= (beta_mu + beta_phi)
         #bbdd *= (beta_mu + beta_phi)**2
@@ -1354,19 +1360,19 @@ class BubbleModel(object):
         return dTb**2 * cf_21
 
     def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
-        xi_bb=None, **_kw_):
+        xi_bb=None, Asys=1., **_kw_):
         return self._get_ps_bx(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, xi_bb=xi_bb, which_ps='bb', **_kw_)
+            alpha=alpha, xi_bb=xi_bb, which_ps='bb', Asys=Asys, **_kw_)
 
     def get_ps_bd(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
-        xi_bb=None, Ts=np.inf, **_kw_):
+        xi_bb=None, Ts=np.inf, Asys=1., **_kw_):
         ps = self._get_ps_bx(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha, xi_bb=xi_bb, which_ps='bd', **_kw_)
+            alpha=alpha, xi_bb=xi_bb, which_ps='bd', Asys=Asys, **_kw_)
 
         return ps / 2. / self.get_alpha(z, Ts)
 
     def _get_ps_bx(self, z, k, Q=0.5, R=5., sigma=0.5, gamma=None, alpha=0.,
-        xi_bb=None, which_ps='bb', **_kw_):
+        xi_bb=None, which_ps='bb', Asys=1, **_kw_):
 
         if which_ps == 'bb':
             jp = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
@@ -1390,7 +1396,7 @@ class BubbleModel(object):
                 gamma=gamma, alpha=alpha, method=self.include_overlap_corr,
                 which_vol='tot')
         else:
-            corr = 1.
+            corr = Asys if which_ps == 'bb' else np.sqrt(Asys)
 
         cf = (jp - avg) * corr
 
@@ -1411,7 +1417,7 @@ class BubbleModel(object):
         return ps
 
     def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
-        gamma=0., alpha=0., xi_bb=None, delta_ion=0.):
+        gamma=0., alpha=0., Asys=1., xi_bb=None, delta_ion=0.):
 
         # Much faster without bubbles -- just scale P_mm
         if (not self.bubbles) or (Q < tiny_Q):
@@ -1428,7 +1434,7 @@ class BubbleModel(object):
             # its own correction term, so we don't apply a correction
             # explicitly here as we do above in the Q=0 density-driven limit.
             cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R=R,
-                sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb,
+                sigma=sigma, gamma=gamma, alpha=alpha, Asys=Asys, xi_bb=xi_bb,
                 delta_ion=delta_ion)
 
             # Setup interpolant
@@ -1461,7 +1467,7 @@ class BubbleModel(object):
 
     def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None, which_ps='bb',
         free_norm=True, maxiter=100, xtol=1e-2, ftol=1e-3, use_log=True,
-        R=None, sigma=None, gamma=None, Ts_guess=None):
+        R=None, sigma=None, gamma=None, Asys=1., Ts_guess=None):
         """
         Find the best-fit micro21cm representation of an input
         power spectrum (presumably from 21cmFAST).
@@ -1509,17 +1515,17 @@ class BubbleModel(object):
 
         if free_norm and (not fitting_Ts):
             ps = lambda pars: pars[2] \
-                * func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
+                * func_ps(z=z, k=k_in, Q=Q, Ts=Ts, Asys=Asys,
                 R=10**pars[0], sigma=pars[1], gamma=pars[1])
         else:
             if fitting_Ts:
                 Tcmb = self.get_Tcmb(z)
 
                 ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],
-                    R=R, sigma=sigma, gamma=gamma)
+                    R=R, sigma=sigma, gamma=gamma, Asys=Asys)
             else:
                 ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
-                    R=10**pars[0], sigma=pars[1], gamma=pars[1])
+                    R=10**pars[0], sigma=pars[1], gamma=pars[1], Asys=Asys)
 
         Dsq = lambda pars: k_in**3 * ps(pars) / 2. / np.pi**2
 

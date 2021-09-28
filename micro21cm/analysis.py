@@ -19,18 +19,19 @@ from matplotlib.colors import LogNorm, Normalize
 from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, double_power_law, \
-    extract_params, power_law_lognorm
+    extract_params, power_law_lognorm, erf_Q, power_law_Q
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 _default_modes = np.logspace(-1, 0., 21)
 _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']
 _default_ls = ['-', '--', '-.', ':']
 _default_labels = {'Q': r'$Q$', 'R': r'$R$', 'Ts': r'$T_S$',
-    'sigma': r'$\sigma$', 'gamma': r'$\gamma$'}
+    'sigma': r'$\sigma$', 'gamma': r'$\gamma$', 'Asys': r'$A_{\rm{sys}}$'}
 _default_limits = {'Q': (-0.05, 1.05), 'R': (3e-1, 30),
     'Ts': (1, 200),
-    'sigma': (0, 2), 'gamma': (-4, -2)}
+    'sigma': (0, 2), 'gamma': (-4, -2), 'Asys': (0.2, 2)}
 _default_z = np.arange(5, 20, 0.05)
+_default_Q = np.arange(0, 1.01, 0.01)
 
 bbox = dict(facecolor='none', edgecolor='k', fc='w',
         boxstyle='round,pad=0.3', alpha=0.9, zorder=1000)
@@ -575,7 +576,7 @@ class AnalyzeFit(object): # pragma: no cover
 
             return np.array(zplot), y
 
-    def plot_zevol(self, par, use_best=False, conflevel=0.68,
+    def plot_evol(self, par, use_best=False, conflevel=0.68,
         ax=None, fig=1, burn=0, marker_kw={}, scatter=False, boxplot=False,
         zoffset=0, samples=None, **kwargs):
         """
@@ -595,7 +596,7 @@ class AnalyzeFit(object): # pragma: no cover
             ibest = ibest[0]
 
         # First, deal with parametric results if we have them.
-        for _par_ in ['Q', 'R', 'Ts']:
+        for _par_ in ['Q', 'R', 'Ts', 'Asys']:
             if (par != _par_):
                 continue
 
@@ -622,6 +623,8 @@ class AnalyzeFit(object): # pragma: no cover
                     func = power_law_max1
                 elif _par_ == 'Ts':
                     func = power_law_lognorm
+                elif _par_ == 'R':
+                    func = power_law_Q
                 else:
                     func = power_law
             elif fname == 'bpl':
@@ -632,6 +635,9 @@ class AnalyzeFit(object): # pragma: no cover
             elif fname == 'dpl':
                 assert _par_ == 'Ts'
                 func = double_power_law
+            elif fname == 'erf':
+                assert _par_ == 'Asys'
+                func = erf_Q
             else:
                 raise NotImplemented('No option for {} yet'.format(fname))
 
@@ -639,26 +645,35 @@ class AnalyzeFit(object): # pragma: no cover
 
             # Make Q(z) for each MCMC sample
             if use_best:
-                ybest = func(_default_z, pbest)
-                ax.plot(_default_z, ybest, **kwargs)
+                if par in ['R', 'Asys']:
+                    ybest = func(_default_Q, pbest)
+                    ax.plot(_default_Q, ybest, **kwargs)
+                else:
+                    ybest = func(_default_z, pbest)
+                    ax.plot(_default_z, ybest, **kwargs)
             else:
                 v_flat = [self.data['flatchain'][burn:,_p] \
                     for _p in p]
                 _pars_ = np.array([element for element in v_flat])
 
-                if scatter or boxplot:
-                    zplot = self.data['zfit']
+                if par in ['R', 'Asys']:
+                    ybest = func(_default_Q, pbest)
+                    xvals = _default_Q
                 else:
-                    zplot = _default_z
+                    if scatter or boxplot:
+                        zplot = self.data['zfit']
+                    else:
+                        zplot = _default_z
 
-                ybest = func(zplot, pbest)
+                    ybest = func(zplot, pbest)
+                    xvals = zplot
 
                 assert burn < v[0].size, \
                     "Provided `burn` exceeds size of chain!"
 
-                y = np.zeros((v[0].size-burn, _default_z.size))
-                for i, _z_ in enumerate(zplot):
-                    y[:,i] = func(_z_, _pars_)
+                y = np.zeros((v[0].size-burn, xvals.size))
+                for i, _x_ in enumerate(xvals):
+                    y[:,i] = func(_x_, _pars_)
 
                 #zplot, y = self.get_samples
 
@@ -668,10 +683,10 @@ class AnalyzeFit(object): # pragma: no cover
 
                 if boxplot:
                     kw = kwargs.copy()
-                    for i, _z_ in enumerate(zplot):
+                    for i, _x_ in enumerate(xvals):
                         conf = np.array([[_lo / 100., _hi / 100.]])
                         data = y[:,i]#np.concatenate((y[:,i], ybest[i]))
-                        ax.boxplot(data, positions=[_z_],
+                        ax.boxplot(data, positions=[_x_],
                             showfliers=False,
                             manage_ticks=False,
                             conf_intervals=conf)
@@ -682,25 +697,31 @@ class AnalyzeFit(object): # pragma: no cover
                             del kw['label']
                 elif scatter:
                     kw = kwargs.copy()
-                    for i, _z_ in enumerate(zplot):
-                        ax.plot([_z_+zoffset]*2, [lo[i], hi[i]], **kw)
-                        ax.scatter([_z_+zoffset]*2, [ybest[i]]*2, **marker_kw)
+                    for i, _x_ in enumerate(zplot):
+                        ax.plot([_x_+zoffset]*2, [lo[i], hi[i]], **kw)
+                        ax.scatter([_x_+zoffset]*2, [ybest[i]]*2, **marker_kw)
 
                         if 'label' in kw:
                             del kw['label']
 
                 elif samples is not None:
-                    ax.plot(zplot, y[-samples:,:].T, **kwargs)
+                    ax.plot(xvals, y[-samples:,:].T, **kwargs)
                 else:
-                    ax.fill_between(zplot, lo, hi, **kwargs)
+                    ax.fill_between(xvals, lo, hi, **kwargs)
 
             if par in ['Ts', 'R']:
                 ax.set_yscale('log')
 
-            ax.set_xlabel(r'$z$')
+            if par in ['R', 'Asys']:
+                ax.set_xlabel(r'$Q$')
+                ax.set_xlim(0, 1)
+            else:
+                ax.set_xlabel(r'$z$')
+                ax.set_xlim(min(self.data['zfit'])-1,
+                    max(self.data['zfit'])+1)
+
             ax.set_ylabel(_default_labels[_par_])
-            ax.set_xlim(min(self.data['zfit'])-1,
-                max(self.data['zfit'])+1)
+
             ax.set_ylim(*_default_limits[_par_])
 
             return ax

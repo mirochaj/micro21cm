@@ -1090,7 +1090,7 @@ class BubbleModel(object):
         return var
 
     def get_density_threshold(self, z, Q=0.0, R=5., sigma=0.5,
-        gamma=0, alpha=0, **_kw_):
+        gamma=0, alpha=0, Rmin=None, **_kw_):
         """
         Use "volume matching" to determine density level above which
         gas is ionized.
@@ -1155,6 +1155,9 @@ class BubbleModel(object):
         else:
             raise NotImplemented('help')
 
+        if Rmin is not None:
+            Rsm = np.maximum(Rsm, Rmin)
+
         var_R = self.get_variance_mm(z, r=Rsm)
         sig_R = np.sqrt(var_R)
 
@@ -1172,7 +1175,7 @@ class BubbleModel(object):
         return x_thresh, w
 
     def get_bubble_density(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0,
-        **_kw_):
+        Rmin=None, **_kw_):
         """
         Return mean density in ionized regions.
         """
@@ -1182,7 +1185,7 @@ class BubbleModel(object):
             return 0.0
 
         x_thresh, w = self.get_density_threshold(z, Q=Q, R=R,
-            sigma=sigma, gamma=gamma, alpha=alpha, **_kw_)
+            sigma=sigma, gamma=gamma, alpha=alpha, Rmin=Rmin, **_kw_)
 
         # Normalization factor
         norm = 0.5 * erfc(x_thresh / w / np.sqrt(2.))

@@ -16,7 +16,8 @@ from scipy.optimize import fmin, fsolve
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz, quad
 from scipy.special import erfcinv, erf, erfc
-from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, \
+from .util import get_cf_from_ps_func, get_ps_from_cf_func, \
+    get_cf_from_ps_tab, get_ps_from_cf_tab, ProgressBar, \
     CTfit, Tgadiabaticfit
 
 tiny_Q = 1e-3
@@ -45,7 +46,8 @@ class BubbleModel(object):
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
-        use_pbar=False, approx_linear=True, **_kw_):
+        use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
+        **_kw_):
         """
         Make a simple bubble model of the IGM.
 
@@ -141,6 +143,8 @@ class BubbleModel(object):
         self.bubbles_ion = bubbles_ion
         self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.use_pbar = use_pbar
+        self.use_mcfit = use_mcfit
+        self.mcfit_kwargs = mcfit_kwargs
         self.bubbles_model = bubbles_model
         self.include_P1_corr = include_P1_corr
         self.include_P2_corr = include_P2_corr

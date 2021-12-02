@@ -33,6 +33,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from mcfit import TophatVar
+except ImportError:
+    pass
+
 PATH = os.environ.get("MICRO21CM")
 
 class BubbleModel(object):
@@ -47,7 +52,7 @@ class BubbleModel(object):
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
         use_pbar=False, use_mcfit=False, mcfit_kwargs={}, approx_linear=True,
-        **_kw_):
+        kmin=1e-5, kmax=None, dlogk=0.05, **_kw_):
         """
         Make a simple bubble model of the IGM.
 
@@ -114,7 +119,9 @@ class BubbleModel(object):
             between redshifts after. Note that this doesn't matter a ton as
             long as the redshifts of interest are contained the provided range,
             as the only cost is overhead. By default, will span 0 <= z <= 15.
-
+        kmin, kmax, dlogk: float
+            If ever in need of an array of k modes, will construct one
+            (logarithmically-spaced) using these constraints.
 
         Cosmology
         ---------
@@ -145,6 +152,10 @@ class BubbleModel(object):
         self.use_pbar = use_pbar
         self.use_mcfit = use_mcfit
         self.mcfit_kwargs = mcfit_kwargs
+        self._kmin = kmin
+        self._kmax = kmax
+        self._dlogk = dlogk
+
         self.bubbles_model = bubbles_model
         self.include_P1_corr = include_P1_corr
         self.include_P2_corr = include_P2_corr
@@ -207,9 +218,16 @@ class BubbleModel(object):
         pars.set_matter_power(redshifts=zs, kmax=kmax,
             k_per_logint=k_per_logint, silent=True)
         results = camb.get_results(pars)
-        self._matter_ps_ = results.get_matter_power_interpolator(nonlinear=False)
+        self._matter_ps_ = \
+            results.get_matter_power_interpolator(nonlinear=False)
         self._camb_results = results
         self._cosmo_ = pars
+
+    def get_sigma8(self):
+        if not hasattr(self, '_camb_results'):
+            self._init_cosmology()
+
+        return self._camb_results.get_sigma8_0()
 
     @property
     def cosmo(self):
@@ -289,7 +307,21 @@ class BubbleModel(object):
                     np.log10(self.Rmax), self.NR)
         return self._tab_R
 
-    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.):
+    @property
+    def tab_k(self):
+        if not hasattr(self, '_tab_k'):
+            kmin = self._kmin
+            kmax = self.transfer_params['kmax'] if self._kmax is None \
+                else self._kmax
+            dlogk = self._dlogk
+
+            karr = 10**np.arange(np.log10(kmin), np.log10(kmax)+dlogk, dlogk)
+            self._tab_k = karr
+
+        return self._tab_k
+
+    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
+        alpha=0.):
         """
         Return an unnormalized version of the bubble size distribution.
 
@@ -955,8 +987,15 @@ class BubbleModel(object):
         if field in ['matter', 'm', 'mm', 'dd', 'density']:
             Pofk = lambda k: self.get_ps_matter(z, k)
 
-            var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
-                rtol=rtol, atol=atol)
+            if self.use_mcfit:
+                karr = self.tab_k
+                Parr = Pofk(karr)
+                _R_, _var_ = TophatVar(karr, lowring=True)(Parr, extrap=True)
+                var_f = interp1d(_R_, _var_, kind='cubic')
+                var = var_f(r)
+            else:
+                var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
+                    rtol=rtol, atol=atol)
 
             return var
 
@@ -974,11 +1013,15 @@ class BubbleModel(object):
         karr = 10**np.arange(np.log10(kmin), np.log10(kmax)+dlogk, dlogk)
         tab_ps = ps(karr)
 
-        Pofk = interp1d(karr, tab_ps, kind='cubic', bounds_error=False,
-            fill_value=0.0)
+        if self.use_mcfit:
+            _R_, _var_ = TophatVar(karr, lowring=True)(tab_ps, extrap=True)
+            var = np.interp(np.log(r), np.log(_R_), _var_)
+        else:
+            Pofk = interp1d(karr, tab_ps, kind='cubic', bounds_error=False,
+                fill_value=0.0)
 
-        var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
-            rtol=rtol, atol=atol)
+            var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
+                rtol=rtol, atol=atol)
 
         return var
 
@@ -1019,6 +1062,8 @@ class BubbleModel(object):
         atol=1e-2):
         """
         Compute variance of generic field from input power spectrum.
+
+        .. note :: Eq. 38 in methods paper (as of 12.02.2021).
 
         Parameters
         ----------
@@ -1062,8 +1107,10 @@ class BubbleModel(object):
 
         var = quad(integrand_full, kmin, kcrit, **ikw)[0]
 
-        first_bit = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R, **ikw)
-        second_bit = quad(integrand_2, kcrit, kmax, weight='cos', wvar=R, **ikw)
+        first_bit = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R,
+            **ikw)
+        second_bit = quad(integrand_2, kcrit, kmax, weight='cos', wvar=R,
+            **ikw)
         new = first_bit[0] - second_bit[0]
 
         var += new / norm

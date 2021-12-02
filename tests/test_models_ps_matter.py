@@ -14,7 +14,7 @@ import micro21cm
 import numpy as np
 
 
-def test():
+def test(rtol=1e-2):
     k = np.logspace(-2, 1, 100)
 
     model = micro21cm.BubbleModel()
@@ -32,8 +32,20 @@ def test():
         assert np.all(P_mm_z < P_mm)
         P_mm = P_mm_z
 
-    # Verify that we recover sigma_8
-    s8 = model.get_variance_mm(z=0., r=8.)
+    # Verify that we recover sigma_8.
+    s8_in = np.sqrt(model.get_variance_mm(z=0., r=8.)
+
+    # Test mcfit tophat window machinery also.
+    model_mc = micro21cm.BubbleModel(use_mcfit=True)
+
+    s8_mc = np.sqrt(model_mc.get_variance_mm(z=0., r=8.))
+
+    s8 = model.get_sigma8()
+
+    err_mc = abs(s8_mc - s8) / s8
+    assert err_mc < rtol, \
+        "Not recovering sigma_8 to <={:.1e}% w/ mcfit (err={:.5e}).".format(rtol,
+            err_mc)
 
 
 if __name__ == '__main__':

@@ -1065,6 +1065,9 @@ class BubbleModel(object):
 
         .. note :: Eq. 38 in methods paper (as of 12.02.2021).
 
+        .. note :: Just brute-forcing this, as the Clenshaw-Curtis method
+            was not passing the sigma_8 test. Still not clear why that was...
+
         Parameters
         ----------
         ps : function
@@ -1097,25 +1100,7 @@ class BubbleModel(object):
         integrand_full = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
             * 4. * np.pi * k**2 / (2. * np.pi)**3
 
-        kcrit = 1. / R
-        norm = 1. / integrand_full(kcrit)
-
-        integrand_1 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
-            * 3 / (k * R)**3 / (2. * np.pi)**3
-        integrand_2 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
-            * 3 * k * R / (k * R)**3 / (2. * np.pi)**3
-
-        var = quad(integrand_full, kmin, kcrit, **ikw)[0]
-
-        first_bit = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R,
-            **ikw)
-        second_bit = quad(integrand_2, kcrit, kmax, weight='cos', wvar=R,
-            **ikw)
-        new = first_bit[0] - second_bit[0]
-
-        var += new / norm
-
-        return var
+        return quad(integrand_full, 0.0, np.inf, **ikw)[0]
 
     def get_density_threshold(self, z, Q=0.0, R=5., sigma=0.5,
         gamma=0, alpha=0, **_kw_):

@@ -33,7 +33,7 @@ def test(rtol=1e-2):
         P_mm = P_mm_z
 
     # Verify that we recover sigma_8.
-    s8_in = np.sqrt(model.get_variance_mm(z=0., r=8.)
+    s8_in = np.sqrt(model.get_variance_mm(z=0., r=8.))
 
     # Test mcfit tophat window machinery also.
     model_mc = micro21cm.BubbleModel(use_mcfit=True)
@@ -41,6 +41,8 @@ def test(rtol=1e-2):
     s8_mc = np.sqrt(model_mc.get_variance_mm(z=0., r=8.))
 
     s8 = model.get_sigma8()
+
+    print(s8, s8_in, s8_mc)
 
     err_mc = abs(s8_mc - s8) / s8
     assert err_mc < rtol, \

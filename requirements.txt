@@ -8,3 +8,4 @@ pyyaml>=5.4
 emcee==2.2.1
 camb>=1.1.1
 powerbox>=0.6
+mcfit

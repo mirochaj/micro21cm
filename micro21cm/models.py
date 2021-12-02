@@ -46,7 +46,7 @@ class BubbleModel(object):
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
-        use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
+        use_pbar=False, use_mcfit=False, mcfit_kwargs={}, approx_linear=True,
         **_kw_):
         """
         Make a simple bubble model of the IGM.
@@ -912,38 +912,18 @@ class BubbleModel(object):
         if z in self._cache_dd_:
             return self._cache_dd_[z]
 
-        dd = get_cf_from_ps(self.tab_R, lambda kk: self.get_ps_matter(z, kk))
+        if self.use_mcfit:
+            ps_tab = self.get_ps_matter(z, 1. / self.tab_R)
+            _R_, _dd_ = get_cf_from_ps_tab(1. / self.tab_R, ps_tab)
+
+            dd = np.interp(np.log(self.tab_R), np.log(_R_), _dd_)
+        else:
+            ps_func = lambda kk: self.get_ps_matter(z, kk)
+            dd = get_cf_from_ps_func(self.tab_R, ps_func)
 
         self._cache_dd_[z] = dd
         return dd
 
-    #def get_bd(self, z, Q=0.0, R=5., sigma=0.5, alpha=0., bbar=1,
-    #    bhbar=1, **_kw_):
-    #    """
-    #    Get the cross correlation function between bubbles and density,
-    #    equivalent to <bd'>.
-    #    """
-#
-    #    dd = self.get_dd(z)
-#
-    #    Rdiffabs=np.abs(self.Rarr - R)
-    #    Rindex = Rdiffabs.argmin()
-#
-#
-    #    fact =  bbar * bhbar * Q * dd
-#
-    #    xbar=Q
-    #    #true formula is (1-xbar) = exp(-Q)
-#   #     xbar= 1 - np.exp(-Q)
-#
-#
-    #    bd = (1-xbar) * fact
-    #    bd[self.Rarr <  R] = (1-xbar) *(1.0 - np.exp(fact[Rindex]) )
-    #    #R is characteristic bubble size
-#
-#
-    #    return bd
-#
     def get_r_of_k(self, z, k, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0.,
         bbar=1, bhbar=1):
         """
@@ -1402,15 +1382,18 @@ class BubbleModel(object):
         cf[cf == 0] = tiny_cf
 
         # Setup interpolant
-        _fcf = interp1d(np.log(self.tab_R), cf, kind='cubic',
-            bounds_error=False, fill_value=tiny_cf)
-        f_cf = lambda RR: _fcf.__call__(np.log(RR))
+        if self.use_mcfit:
+            _k_, ps = get_ps_from_cf_tab(self.tab_R, cf)
+        else:
+            _fcf = interp1d(np.log(self.tab_R), cf, kind='cubic',
+                bounds_error=False, fill_value=tiny_cf)
+            f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
-        if type(k) != np.ndarray:
-            k = np.array([k])
+            if type(k) != np.ndarray:
+                k = np.array([k])
 
-        ps = get_ps_from_cf(k, f_cf=f_cf,
-            Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
+            ps = get_ps_from_cf_func(k, f_cf=f_cf,
+                Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
         return ps
 
@@ -1436,15 +1419,20 @@ class BubbleModel(object):
                 delta_ion=delta_ion)
 
             # Setup interpolant
-            _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
-                bounds_error=False, fill_value=0.)
-            f_cf = lambda RR: _fcf.__call__(np.log(RR))
+            if self.use_mcfit:
+                _k_, _ps_21 = get_ps_from_cf_tab(self.tab_R, cf_21,
+                    **self.mcfit_kwargs)
+                ps_21 = np.exp(np.interp(k, _k_, np.log(_ps_21)))
+            else:
+                _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
+                    bounds_error=False, fill_value=0.)
+                f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
-            if type(k) != np.ndarray:
-                k = np.array([k])
+                if type(k) != np.ndarray:
+                    k = np.array([k])
 
-            ps_21 = get_ps_from_cf(k, f_cf=f_cf,
-                Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
+                ps_21 = get_ps_from_cf_func(k, f_cf=f_cf,
+                    Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
         return ps_21
 

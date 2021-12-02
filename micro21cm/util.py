@@ -50,16 +50,24 @@ labels = \
 def get_cf_from_ps_tab(k, ps, **kwargs):
     assert have_mcfit, "Must install mcfit! See `use_mcfit` parameter."
 
-    R, cf = P2xi(k, **kwargs)(ps)
+    cf_func = P2xi(k, **kwargs)
+    R, cf = cf_func(ps, extrap=True)
 
-    return R[-1::-1], cf[-1::-1]
+    if R[1] < R[0]:
+        return R[-1::-1], cf[-1::-1]
+    else:
+        return R, cf
 
 def get_ps_from_cf_tab(R, cf, **kwargs):
     assert have_mcfit, "Must install mcfit! See `use_mcfit` parameter."
 
-    k, ps = xi2P(R, **kwargs)(cf)
+    ps_func = xi2P(R, **kwargs)
+    k, ps = ps_func(cf, extrap=True)
 
-    return k[-1::-1], ps[-1::-1]
+    if k[1] < k[0]:
+        return k[-1::-1], ps[-1::-1]
+    else:
+        return k, ps
 
 def get_cf_from_ps_func(R, f_ps, kmin=1e-4, kmax=5000., rtol=1e-5, atol=1e-5):
     cf = np.zeros_like(R)

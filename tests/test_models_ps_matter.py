@@ -17,7 +17,7 @@ import numpy as np
 def test(rtol=1e-2):
     k = np.logspace(-2, 1, 100)
 
-    model = micro21cm.BubbleModel()
+    model = micro21cm.BubbleModel(use_mcfit=False)
 
     # Plot the limits first
     P_mm = np.inf
@@ -42,9 +42,12 @@ def test(rtol=1e-2):
 
     s8 = model.get_sigma8()
 
-    print(s8, s8_in, s8_mc)
-
+    err_in = abs(s8_in - s8) / s8
     err_mc = abs(s8_mc - s8) / s8
+
+    assert err_mc < rtol, \
+        "Not recovering sigma_8 to <={:.1e}% w/o mcfit (err={:.5e}).".format(rtol,
+            err_in)
     assert err_mc < rtol, \
         "Not recovering sigma_8 to <={:.1e}% w/ mcfit (err={:.5e}).".format(rtol,
             err_mc)

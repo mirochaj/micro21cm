@@ -51,7 +51,7 @@ class BubbleModel(object):
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
-        use_pbar=False, use_mcfit=False, mcfit_kwargs={}, approx_linear=True,
+        use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
         kmin=1e-5, kmax=None, dlogk=0.05, **_kw_):
         """
         Make a simple bubble model of the IGM.
@@ -988,9 +988,9 @@ class BubbleModel(object):
             Pofk = lambda k: self.get_ps_matter(z, k)
 
             if self.use_mcfit:
-                karr = self.tab_k
-                Parr = Pofk(karr)
-                _R_, _var_ = TophatVar(karr, lowring=True)(Parr, extrap=True)
+                Parr = Pofk(self.tab_k)
+                _R_, _var_ = TophatVar(self.tab_k, lowring=True)(Parr,
+                    extrap=True)
                 var_f = interp1d(_R_, _var_, kind='cubic')
                 var = var_f(r)
             else:
@@ -1008,14 +1008,15 @@ class BubbleModel(object):
             ps = lambda k: self.get_ps_21cm(z, k, Q=Q, R=R, sigma=sigma,
                 gamma=gamma, alpha=alpha, Ts=Ts)
         else:
-            raise NotImplemented('help')
+            raise NotImplemented('Unrecognized field `{}`.'.format(field))
 
         karr = 10**np.arange(np.log10(kmin), np.log10(kmax)+dlogk, dlogk)
         tab_ps = ps(karr)
 
         if self.use_mcfit:
             _R_, _var_ = TophatVar(karr, lowring=True)(tab_ps, extrap=True)
-            var = np.interp(np.log(r), np.log(_R_), _var_)
+            var_f = interp1d(_R_, _var_, kind='cubic')
+            var = var_f(r)
         else:
             Pofk = interp1d(karr, tab_ps, kind='cubic', bounds_error=False,
                 fill_value=0.0)
@@ -1385,8 +1386,8 @@ class BubbleModel(object):
         xi_bb=None, which_ps='bb', **_kw_):
 
         if which_ps == 'bb':
-            jp = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-                xi_bb=xi_bb)
+            jp = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha, xi_bb=xi_bb)
             avg = Q**2
         elif which_ps == 'bd':
             bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
@@ -1415,7 +1416,8 @@ class BubbleModel(object):
 
         # Setup interpolant
         if self.use_mcfit:
-            _k_, ps = get_ps_from_cf_tab(self.tab_R, cf)
+            _k_, _ps_ = get_ps_from_cf_tab(self.tab_R, cf)
+            ps = np.interp(np.log(k), np.log(_k_), _ps_)
         else:
             _fcf = interp1d(np.log(self.tab_R), cf, kind='cubic',
                 bounds_error=False, fill_value=tiny_cf)
@@ -1454,7 +1456,7 @@ class BubbleModel(object):
             if self.use_mcfit:
                 _k_, _ps_21 = get_ps_from_cf_tab(self.tab_R, cf_21,
                     **self.mcfit_kwargs)
-                ps_21 = np.exp(np.interp(k, _k_, np.log(_ps_21)))
+                ps_21 = np.interp(np.log(k), np.log(_k_), _ps_21)
             else:
                 _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
                     bounds_error=False, fill_value=0.)

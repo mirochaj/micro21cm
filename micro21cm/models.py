@@ -35,6 +35,10 @@ except ImportError:
 
 try:
     from mcfit import TophatVar
+
+    import warnings
+    warnings.filterwarnings("ignore",
+        message="The default value of lowring has been changed to False, ")
 except ImportError:
     pass
 

@@ -53,6 +53,7 @@ class BubbleModel(object):
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
+        effective_grid=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
         use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
@@ -102,6 +103,14 @@ class BubbleModel(object):
             If > 0, will allow terms involving both ionization and density to
             be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2021) for
             details.
+        effective_grid : bool
+            When determining the mean bubble density, we smooth the density
+            field on a scale R, determined by the value of use_volume_match.
+            Basically, we're smoothing on some indicator of the typical bubble
+            size, e.g., where Vdn/dR peaks, vdn/dlogR, etc. This parameter
+            sets a minimum smoothing scale since we could end up with a
+            smoothing scale smaller than the grid resolution of a semi-numeric
+            model we're comparing to.
         density_pdf : str
             Sets functional form of 1-D PDF of density field. Only options
             are normal and lognormal. Affects computation of cross-terms
@@ -155,6 +164,8 @@ class BubbleModel(object):
         self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.use_pbar = use_pbar
         self.use_mcfit = use_mcfit
+        self.effective_grid = effective_grid
+
         self.mcfit_kwargs = mcfit_kwargs
         self._kmin = kmin
         self._kmax = kmax
@@ -996,6 +1007,16 @@ class BubbleModel(object):
                 _R_, _var_ = TophatVar(self.tab_k, lowring=True)(Parr,
                     extrap=True)
                 var_f = interp1d(_R_, _var_, kind='cubic')
+
+                if r < _R_.min():
+                    r = _R_.min()
+                    print("Smoothing scale below tabulated R range!")
+                    print("Will set to minumum: r={:.2e}".format(r))
+                elif r > _R_.max():
+                    r = _R_.max()
+                    print("Smoothing scale above tabulated R range!")
+                    print("Will set to maximum: r={:.2e}".format(r))
+
                 var = var_f(r)
             else:
                 var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
@@ -1108,7 +1129,7 @@ class BubbleModel(object):
         return quad(integrand_full, 0.0, np.inf, **ikw)[0]
 
     def get_density_threshold(self, z, Q=0.0, R=5., sigma=0.5,
-        gamma=0, alpha=0, **_kw_):
+        gamma=0, alpha=0, Rmin=None, **_kw_):
         """
         Use "volume matching" to determine density level above which
         gas is ionized.
@@ -1125,6 +1146,9 @@ class BubbleModel(object):
                 2: smooth on scale where volume-weighted BSD V dn/dR peaks.
                 3: smooth on scale where dn/dR peaks.
 
+        Rmin : int, float
+            Minimum smoothing scale
+
 
         Returns
         -------
@@ -1136,6 +1160,9 @@ class BubbleModel(object):
         # Hack!
         if (Q < tiny_Q) or (Q == 1):
             return -1, 0.0
+
+        if (Rmin is not None) and (self.effective_grid is not None):
+            print("User-supplied `Rmin` will override `self.effective_grid`.")
 
         if self.use_volume_match == 1:
             if self.bubbles_via_Rpeak:
@@ -1173,6 +1200,10 @@ class BubbleModel(object):
         else:
             raise NotImplemented('help')
 
+        # Impose minimum smoothing scale, attempt to emulate gridding.
+        if Rmin is not None:
+            Rsm = max(Rsm, Rmin)
+
         var_R = self.get_variance_mm(z, r=Rsm)
         sig_R = np.sqrt(var_R)
 
@@ -1190,7 +1221,7 @@ class BubbleModel(object):
         return x_thresh, w
 
     def get_bubble_density(self, z, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0,
-        **_kw_):
+        Rmin=None, **_kw_):
         """
         Return mean density in ionized regions.
         """
@@ -1200,7 +1231,7 @@ class BubbleModel(object):
             return 0.0
 
         x_thresh, w = self.get_density_threshold(z, Q=Q, R=R,
-            sigma=sigma, gamma=gamma, alpha=alpha, **_kw_)
+            sigma=sigma, gamma=gamma, alpha=alpha, Rmin=Rmin, **_kw_)
 
         # Normalization factor
         norm = 0.5 * erfc(x_thresh / w / np.sqrt(2.))
@@ -1221,7 +1252,7 @@ class BubbleModel(object):
         return del_i / norm
 
     def get_cross_terms(self, z, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
-        gamma=0., alpha=0., beta=1., delta_ion=0., separate=False,
+        gamma=0., alpha=0., beta=1., delta_ion=0., separate=False, Rmin=None,
         **_kw_):
         """
         Compute all terms that involve bubble field and density field.
@@ -1249,7 +1280,7 @@ class BubbleModel(object):
             d_i = 0
         elif self.use_volume_match:
             d_i = self.get_bubble_density(z, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha)
+                gamma=gamma, alpha=alpha, Rmin=None)
         else:
             d_i = delta_ion
 
@@ -1361,7 +1392,8 @@ class BubbleModel(object):
 
         bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
             self.get_cross_terms(z, Q=Q, Ts=Ts, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, delta_ion=delta_ion, separate=True)
+                alpha=alpha, delta_ion=delta_ion, separate=True,
+                Rmin=self.effective_grid)
 
         bd *= (beta_mu + beta_phi)
         #bbd *= (beta_mu + beta_phi)
@@ -1396,7 +1428,8 @@ class BubbleModel(object):
         elif which_ps == 'bd':
             bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
                 self.get_cross_terms(z, separate=True, Q=Q, R=R,
-                    sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb, **_kw_)
+                    sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb,
+                    Rmin=self.effective_grid, **_kw_)
             jp = bd
 
             d_i = self.get_bubble_density(z=z, Q=Q, R=R,

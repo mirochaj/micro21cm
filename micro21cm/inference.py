@@ -47,6 +47,7 @@ _priors_broad = \
  'R': (0, 100),
  'sigma': (0.05, 2),
  'gamma': (-4, 0),
+ 'Asys': (0.5, 1.5),
 }
 
 _guesses_broad = \
@@ -56,6 +57,7 @@ _guesses_broad = \
  'R': (0.5, 10.),
  'sigma': (0.6, 1.2),
  'gamma': (-3.8, -3),
+ 'Asys': (0.8, 1.2),
 }
 
 _bins = \
@@ -64,6 +66,7 @@ _bins = \
  'Q': np.arange(-0.01, 1.01, 0.01),
  'R': np.arange(0, 50, 0.2),
  'sigma': np.arange(0.0, 1.0, 0.05),
+ 'Asys': np.arange(0.5, 1.55, 0.05),
 }
 
 _guesses_Q_tanh = {'p0': (6, 10), 'p1': (1, 4)}
@@ -74,7 +77,7 @@ _guesses_Q_pl = {'p0': (0.25, 0.75), 'p1': (-8, 0)}
 _guesses_Q = {'tanh': _guesses_Q_tanh, 'bpl': _guesses_Q_bpl,
     'broad': _guesses_broad['Q'], 'pl': _guesses_Q_pl}
 
-_guesses_R_pl = {'p0': (0.5, 10.), 'p1': (-5., -20.)}
+_guesses_R_pl = {'p0': (5, 15.), 'p1': (0, 2)}
 _guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
 _guesses_T_dpl = {'p0': (5., 20.), 'p1': (8, 20), 'p2': (3, 7),
@@ -88,8 +91,11 @@ _guesses_s = {'pl': _guesses_s_pl, 'broad': _guesses_broad['sigma']}
 
 _guesses_g = {'broad': _guesses_broad['gamma']}
 
+_guesses_A_erf = {'p0': (1, 1.5), 'p1': (1, 3), 'p2': (0.6, 1)}
+_guesses_A = {'erf': _guesses_A_erf, 'broad': _guesses_broad['Asys']}
+
 _guesses = {'R': _guesses_R, 'Q': _guesses_Q, 'Ts': _guesses_T,
-    'sigma': _guesses_s, 'gamma': _guesses_g}
+    'sigma': _guesses_s, 'gamma': _guesses_g, 'Asys': _guesses_A}
 
 _priors_Q_tanh = {'p0': (5, 15), 'p1': (0, 20)}
 _priors_Q_bpl = {'p0': (0, 1), 'p1': (5, 20), 'p2': (-6, 0), 'p3': (-6, 0)}
@@ -97,7 +103,7 @@ _priors_Q_pl = {'p0': (0, 1), 'p1': (-20, 0)}
 _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl,
     'broad': _priors_broad['Q'], 'pl': _priors_Q_pl}
 
-_priors_R_pl = {'p0': (0, 30), 'p1': (-25, 0)}
+_priors_R_pl = {'p0': (0, 30), 'p1': (0, 5)}
 _priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
 
 _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
@@ -110,8 +116,11 @@ _priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl,
     'pl': _priors_T_pl}
 _priors_g = {'broad': _priors_broad['gamma']}
 
+_priors_A_erf = {'p0': (0.5, 1.5), 'p1': (0, 10), 'p2': (0.5, 1.5)}
+_priors_A = {'broad': _priors_broad['Asys'], 'erf': _priors_A_erf}
+
 _priors = {'Q': _priors_Q, 'R': _priors_R, 'sigma': _priors_s,
-    'Ts': _priors_T, 'gamma': _priors_g}
+    'Ts': _priors_T, 'gamma': _priors_g, 'Asys': _priors_A}
 
 fit_kwargs = \
 {
@@ -127,24 +136,28 @@ fit_kwargs = \
  'Ts_func': None,
  'sigma_func': None,
  'gamma_func': None,
+ 'Asys_func': None,
 
  'Q_val': None,
  'Ts_val': None,
  'R_val': None,
  'sigma_val': None,
  'gamma_val': None,
+ 'Asys_val': None,
 
  'Q_const': None,
  'Ts_const': None,
  'R_const': None,
  'sigma_const': None,
  'gamma_const': None,
+ 'Asys_const': None,
 
  'Q_prior': None,
  'Ts_prior': None,
  'R_prior': None,
  'sigma_prior': None,
  'gamma_prior': None,
+ 'Asys_prior': None,
 
  'Rpeak_prior': _priors_broad['R'],
 
@@ -153,6 +166,7 @@ fit_kwargs = \
  'Ts_monotonic': False,
  'sigma_monotonic': False,
  'gamma_monotonic': False,
+ 'Asys_monotonic': False,
 
  'Ts_log10': True,
 
@@ -182,11 +196,20 @@ R_stagger = lambda z: ((z - 5.) / 5.)**-2
 
 _normal = lambda x, p0, p1, p2: p0 * np.exp(-(x - p1)**2 / 2. / p2**2)
 
+def lin_Q(Q, pars):
+    return pars[0] * Q + pars[1]
+
+def erf_Q(Q, pars):
+    return pars[0] * (1. - erf(pars[1] * Q)) + pars[2]
+
 def tanh_generic(z, pars):
     return 0.5 * (np.tanh((pars[0] - z) / pars[1]) + 1.)
 
 def power_law(z, pars):
     return pars[0] * ((1 + z) / 8.)**pars[1]
+
+def power_law_Q(Q, pars):
+    return pars[0] * (Q / 0.5)**pars[1]
 
 def power_law_lognorm(z, pars):
     return 10**pars[0] * ((1 + z) / 8.)**pars[1]
@@ -411,6 +434,9 @@ class FitHelper(object):
                 (kwargs['bubbles_pdf'][0:4] == 'plex'):
                 prefix += '_gconst'
 
+            if (kwargs['Asys_func'] is not None):
+                prefix += '_A{}'.format(kwargs['Asys_func'])
+
             if kwargs['prior_tau']:
                 prefix += '_ptau'
 
@@ -505,6 +531,12 @@ class FitHelper(object):
             self._func_s = self.get_func('gamma')
         return self._func_s
 
+    @property
+    def func_A(self):
+        if not hasattr(self, '_func_A'):
+            self._func_A = self.get_func('Asys')
+        return self._func_A
+
     def func(self, par):
         if par == 'Q':
             return self.func_Q
@@ -516,6 +548,8 @@ class FitHelper(object):
             return self.func_gamma
         elif par == 'Ts':
             return self.func_T
+        elif par == 'Asys':
+            return self.func_A
         else:
             return None
 
@@ -523,6 +557,10 @@ class FitHelper(object):
         name = par + '_func'
         if self.kwargs[name] is None:
             func = None
+        elif self.kwargs[name] == 'linear':
+            func = lambda Q, pars: lin_Q(Q, pars)
+        elif self.kwargs[name] == 'erf':
+            func = lambda Q, pars: erf_Q(Q, pars)
         elif self.kwargs[name] == 'tanh':
             func = lambda z, pars: tanh_generic(z, pars)
         elif self.kwargs[name] == 'pl':
@@ -531,7 +569,7 @@ class FitHelper(object):
             elif par == 'Ts':
                 func = lambda z, pars: power_law_lognorm(z, pars)
             else:
-                func = lambda z, pars: power_law(z, pars)
+                func = lambda Q, pars: power_law_Q(Q, pars)
         elif self.kwargs[name] == 'bpl':
             if par == 'Q':
                 func = lambda z, pars: broken_power_law_max1(z, pars)
@@ -628,6 +666,10 @@ class FitHelper(object):
                     N += 2
                 elif func in ['bpl', 'dpl']:
                     N += 4
+                elif func in ['erf']:
+                    N += 3
+                elif func in ['lin', 'linear']:
+                    N += 2
             else:
                 N += self.fit_zindex.size
 
@@ -718,6 +760,11 @@ class FitHelper(object):
             assert self.kwargs['sigma_func'] == 'pl'
             param_z.extend([-np.inf]*2)
             param_names.extend(['sigma_p0', 'sigma_p1'])
+
+        if self.func_A is not None:
+            assert self.kwargs['Asys_func'] == 'erf'
+            param_z.extend([-np.inf]*3)
+            param_names.extend(['Asys_p0', 'Asys_p1', 'Asys_p2'])
 
         return param_names, param_z
 
@@ -834,7 +881,15 @@ class FitHelper(object):
 
             if self.kwargs['{}_func'.format(par)] is not None:
                 _args = extract_params(allpars, args, par)
-                pars[par] = self.func(par)(z, _args)
+
+                if par in ['Q', 'Ts']:
+                    pars[par] = self.func(par)(z, _args)
+
+                    if par == 'Q':
+                        Q_of_z = pars[par]
+                else:
+                    pars[par] = self.func(par)(Q_of_z, _args)
+
             elif self.kwargs['{}_val'.format(par)] is not None:
                 pars[par] = self.kwargs['{}_val'.format(par)]
             elif self.kwargs['{}_const'.format(par)] is not None:

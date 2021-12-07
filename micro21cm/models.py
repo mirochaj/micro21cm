@@ -1490,7 +1490,7 @@ class BubbleModel(object):
                 delta_ion=delta_ion)
 
             # Causes problems for mcfit
-            if use_mcfit:
+            if self.use_mcfit:
                 if np.any(cf_21 < 0):
                     print("WARNING: some CF_21 elements < 0. Setting to tiny_cf.")
                     cf_21[cf_21 < 0] = tiny_cf

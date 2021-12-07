@@ -1489,6 +1489,12 @@ class BubbleModel(object):
                 sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb,
                 delta_ion=delta_ion)
 
+            # Causes problems for mcfit
+            if use_mcfit:
+                if np.any(cf_21 < 0):
+                    print("WARNING: some CF_21 elements < 0. Setting to tiny_cf.")
+                    cf_21[cf_21 < 0] = tiny_cf
+
             # Setup interpolant
             if self.use_mcfit:
                 _k_, _ps_21 = get_ps_from_cf_tab(self.tab_R, cf_21,

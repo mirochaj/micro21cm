@@ -13,10 +13,14 @@ Description: Make 3-d realizations of our bubble model.
 import os
 import pickle
 import numpy as np
-import matplotlib.pyplot as pl
 from .models import BubbleModel
 from scipy.spatial import cKDTree
 from .util import smooth_box, ProgressBar, bin_c2e
+
+try:
+    import matplotlib.pyplot as pl
+except ImportError:
+    pass
 
 try:
     import powerbox as pbox

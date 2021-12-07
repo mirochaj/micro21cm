@@ -12,15 +12,19 @@ Description:
 
 import pickle
 import numpy as np
-import matplotlib.pyplot as pl
 from .models import BubbleModel
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import LogNorm, Normalize
 from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, double_power_law, \
     extract_params, power_law_lognorm, erf_Q, power_law_Q
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
+
+try:
+    import matplotlib.pyplot as pl
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import LogNorm, Normalize
+except ImportError:
+    pass
 
 _default_modes = np.logspace(-1, 0., 21)
 _default_colors = ['k', 'b', 'm', 'c', 'r', 'g', 'y', 'orange']

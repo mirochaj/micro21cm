@@ -16,7 +16,8 @@ from scipy.optimize import fmin, fsolve
 from scipy.interpolate import interp1d
 from scipy.integrate import cumtrapz, quad
 from scipy.special import erfcinv, erf, erfc
-from .util import get_cf_from_ps, get_ps_from_cf, ProgressBar, \
+from .util import get_cf_from_ps_func, get_ps_from_cf_func, \
+    get_cf_from_ps_tab, get_ps_from_cf_tab, ProgressBar, \
     CTfit, Tgadiabaticfit
 
 tiny_Q = 1e-3
@@ -32,6 +33,15 @@ try:
 except ImportError:
     pass
 
+try:
+    from mcfit import TophatVar
+
+    import warnings
+    warnings.filterwarnings("ignore",
+        message="The default value of lowring has been changed to False, ")
+except ImportError:
+    pass
+
 PATH = os.environ.get("MICRO21CM")
 
 class BubbleModel(object):
@@ -43,9 +53,11 @@ class BubbleModel(object):
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
+        effective_grid=None,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
-        use_pbar=False, approx_linear=True, **_kw_):
+        use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
+        kmin=1e-5, kmax=None, dlogk=0.05, **_kw_):
         """
         Make a simple bubble model of the IGM.
 
@@ -91,6 +103,14 @@ class BubbleModel(object):
             If > 0, will allow terms involving both ionization and density to
             be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2021) for
             details.
+        effective_grid : bool
+            When determining the mean bubble density, we smooth the density
+            field on a scale R, determined by the value of use_volume_match.
+            Basically, we're smoothing on some indicator of the typical bubble
+            size, e.g., where Vdn/dR peaks, vdn/dlogR, etc. This parameter
+            sets a minimum smoothing scale since we could end up with a
+            smoothing scale smaller than the grid resolution of a semi-numeric
+            model we're comparing to.
         density_pdf : str
             Sets functional form of 1-D PDF of density field. Only options
             are normal and lognormal. Affects computation of cross-terms
@@ -112,7 +132,9 @@ class BubbleModel(object):
             between redshifts after. Note that this doesn't matter a ton as
             long as the redshifts of interest are contained the provided range,
             as the only cost is overhead. By default, will span 0 <= z <= 15.
-
+        kmin, kmax, dlogk: float
+            If ever in need of an array of k modes, will construct one
+            (logarithmically-spaced) using these constraints.
 
         Cosmology
         ---------
@@ -141,6 +163,14 @@ class BubbleModel(object):
         self.bubbles_ion = bubbles_ion
         self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.use_pbar = use_pbar
+        self.use_mcfit = use_mcfit
+        self.effective_grid = effective_grid
+
+        self.mcfit_kwargs = mcfit_kwargs
+        self._kmin = kmin
+        self._kmax = kmax
+        self._dlogk = dlogk
+
         self.bubbles_model = bubbles_model
         self.include_P1_corr = include_P1_corr
         self.include_P2_corr = include_P2_corr
@@ -206,9 +236,16 @@ class BubbleModel(object):
         pars.set_matter_power(redshifts=zs, kmax=kmax,
             k_per_logint=k_per_logint, silent=True)
         results = camb.get_results(pars)
-        self._matter_ps_ = results.get_matter_power_interpolator(nonlinear=False)
+        self._matter_ps_ = \
+            results.get_matter_power_interpolator(nonlinear=False)
         self._camb_results = results
         self._cosmo_ = pars
+
+    def get_sigma8(self):
+        if not hasattr(self, '_camb_results'):
+            self._init_cosmology()
+
+        return self._camb_results.get_sigma8_0()
 
     @property
     def cosmo(self):
@@ -288,7 +325,21 @@ class BubbleModel(object):
                     np.log10(self.Rmax), self.NR)
         return self._tab_R
 
-    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.):
+    @property
+    def tab_k(self):
+        if not hasattr(self, '_tab_k'):
+            kmin = self._kmin
+            kmax = self.transfer_params['kmax'] if self._kmax is None \
+                else self._kmax
+            dlogk = self._dlogk
+
+            karr = 10**np.arange(np.log10(kmin), np.log10(kmax)+dlogk, dlogk)
+            self._tab_k = karr
+
+        return self._tab_k
+
+    def _get_bsd_unnormalized(self, Q=0.0, R=5., sigma=0.5, gamma=0.,
+        alpha=0.):
         """
         Return an unnormalized version of the bubble size distribution.
 
@@ -911,38 +962,18 @@ class BubbleModel(object):
         if z in self._cache_dd_:
             return self._cache_dd_[z]
 
-        dd = get_cf_from_ps(self.tab_R, lambda kk: self.get_ps_matter(z, kk))
+        if self.use_mcfit:
+            ps_tab = self.get_ps_matter(z, 1. / self.tab_R)
+            _R_, _dd_ = get_cf_from_ps_tab(1. / self.tab_R, ps_tab)
+
+            dd = np.interp(np.log(self.tab_R), np.log(_R_), _dd_)
+        else:
+            ps_func = lambda kk: self.get_ps_matter(z, kk)
+            dd = get_cf_from_ps_func(self.tab_R, ps_func)
 
         self._cache_dd_[z] = dd
         return dd
 
-    #def get_bd(self, z, Q=0.0, R=5., sigma=0.5, alpha=0., bbar=1,
-    #    bhbar=1, **_kw_):
-    #    """
-    #    Get the cross correlation function between bubbles and density,
-    #    equivalent to <bd'>.
-    #    """
-#
-    #    dd = self.get_dd(z)
-#
-    #    Rdiffabs=np.abs(self.Rarr - R)
-    #    Rindex = Rdiffabs.argmin()
-#
-#
-    #    fact =  bbar * bhbar * Q * dd
-#
-    #    xbar=Q
-    #    #true formula is (1-xbar) = exp(-Q)
-#   #     xbar= 1 - np.exp(-Q)
-#
-#
-    #    bd = (1-xbar) * fact
-    #    bd[self.Rarr <  R] = (1-xbar) *(1.0 - np.exp(fact[Rindex]) )
-    #    #R is characteristic bubble size
-#
-#
-    #    return bd
-#
     def get_r_of_k(self, z, k, Q=0.0, R=5., sigma=0.5, gamma=0, alpha=0.,
         bbar=1, bhbar=1):
         """
@@ -974,8 +1005,25 @@ class BubbleModel(object):
         if field in ['matter', 'm', 'mm', 'dd', 'density']:
             Pofk = lambda k: self.get_ps_matter(z, k)
 
-            var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
-                rtol=rtol, atol=atol)
+            if self.use_mcfit:
+                Parr = Pofk(self.tab_k)
+                _R_, _var_ = TophatVar(self.tab_k, lowring=True)(Parr,
+                    extrap=True)
+                var_f = interp1d(_R_, _var_, kind='cubic')
+
+                if r < _R_.min():
+                    r = _R_.min()
+                    print("Smoothing scale below tabulated R range!")
+                    print("Will set to minumum: r={:.2e}".format(r))
+                elif r > _R_.max():
+                    r = _R_.max()
+                    print("Smoothing scale above tabulated R range!")
+                    print("Will set to maximum: r={:.2e}".format(r))
+
+                var = var_f(r)
+            else:
+                var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
+                    rtol=rtol, atol=atol)
 
             return var
 
@@ -988,16 +1036,21 @@ class BubbleModel(object):
             ps = lambda k: self.get_ps_21cm(z, k, Q=Q, R=R, sigma=sigma,
                 gamma=gamma, alpha=alpha, Ts=Ts)
         else:
-            raise NotImplemented('help')
+            raise NotImplemented('Unrecognized field `{}`.'.format(field))
 
         karr = 10**np.arange(np.log10(kmin), np.log10(kmax)+dlogk, dlogk)
         tab_ps = ps(karr)
 
-        Pofk = interp1d(karr, tab_ps, kind='cubic', bounds_error=False,
-            fill_value=0.0)
+        if self.use_mcfit:
+            _R_, _var_ = TophatVar(karr, lowring=True)(tab_ps, extrap=True)
+            var_f = interp1d(_R_, _var_, kind='cubic')
+            var = var_f(r)
+        else:
+            Pofk = interp1d(karr, tab_ps, kind='cubic', bounds_error=False,
+                fill_value=0.0)
 
-        var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
-            rtol=rtol, atol=atol)
+            var = self.get_variance_from_ps(Pofk, r, kmin=kmin, kmax=kmax,
+                rtol=rtol, atol=atol)
 
         return var
 
@@ -1039,6 +1092,11 @@ class BubbleModel(object):
         """
         Compute variance of generic field from input power spectrum.
 
+        .. note :: Eq. 38 in methods paper (as of 12.02.2021).
+
+        .. note :: Just brute-forcing this, as the Clenshaw-Curtis method
+            was not passing the sigma_8 test. Still not clear why that was...
+
         Parameters
         ----------
         ps : function
@@ -1071,23 +1129,7 @@ class BubbleModel(object):
         integrand_full = lambda k: Pofk(k) * np.abs(Wofk(k)**2) \
             * 4. * np.pi * k**2 / (2. * np.pi)**3
 
-        kcrit = 1. / R
-        norm = 1. / integrand_full(kcrit)
-
-        integrand_1 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
-            * 3 / (k * R)**3 / (2. * np.pi)**3
-        integrand_2 = lambda k: norm * Pofk(k) * 4. * np.pi * k**2 \
-            * 3 * k * R / (k * R)**3 / (2. * np.pi)**3
-
-        var = quad(integrand_full, kmin, kcrit, **ikw)[0]
-
-        first_bit = quad(integrand_1, kcrit, kmax, weight='sin', wvar=R, **ikw)
-        second_bit = quad(integrand_2, kcrit, kmax, weight='cos', wvar=R, **ikw)
-        new = first_bit[0] - second_bit[0]
-
-        var += new / norm
-
-        return var
+        return quad(integrand_full, 0.0, np.inf, **ikw)[0]
 
     def get_density_threshold(self, z, Q=0.0, R=5., sigma=0.5,
         gamma=0, alpha=0, Rmin=None, **_kw_):
@@ -1107,6 +1149,9 @@ class BubbleModel(object):
                 2: smooth on scale where volume-weighted BSD V dn/dR peaks.
                 3: smooth on scale where dn/dR peaks.
 
+        Rmin : int, float
+            Minimum smoothing scale
+
 
         Returns
         -------
@@ -1118,6 +1163,9 @@ class BubbleModel(object):
         # Hack!
         if (Q < tiny_Q) or (Q == 1):
             return -1, 0.0
+
+        if (Rmin is not None) and (self.effective_grid is not None):
+            print("User-supplied `Rmin` will override `self.effective_grid`.")
 
         if self.use_volume_match == 1:
             if self.bubbles_via_Rpeak:
@@ -1155,8 +1203,9 @@ class BubbleModel(object):
         else:
             raise NotImplemented('help')
 
+        # Impose minimum smoothing scale, attempt to emulate gridding.
         if Rmin is not None:
-            Rsm = np.maximum(Rsm, Rmin)
+            Rsm = max(Rsm, Rmin)
 
         var_R = self.get_variance_mm(z, r=Rsm)
         sig_R = np.sqrt(var_R)
@@ -1206,7 +1255,7 @@ class BubbleModel(object):
         return del_i / norm
 
     def get_cross_terms(self, z, Q=0.0, Ts=np.inf, R=5., sigma=0.5,
-        gamma=0., alpha=0., beta=1., delta_ion=0., separate=False,
+        gamma=0., alpha=0., beta=1., delta_ion=0., separate=False, Rmin=None,
         **_kw_):
         """
         Compute all terms that involve bubble field and density field.
@@ -1234,7 +1283,7 @@ class BubbleModel(object):
             d_i = 0
         elif self.use_volume_match:
             d_i = self.get_bubble_density(z, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha)
+                gamma=gamma, alpha=alpha, Rmin=None)
         else:
             d_i = delta_ion
 
@@ -1349,7 +1398,8 @@ class BubbleModel(object):
 
         bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
             self.get_cross_terms(z, Q=Q, Ts=Ts, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, delta_ion=delta_ion, separate=True)
+                alpha=alpha, delta_ion=delta_ion, separate=True,
+                Rmin=self.effective_grid)
 
         bd *= (beta_mu + beta_phi) * np.sqrt(Asys)
         #bbd *= (beta_mu + beta_phi)
@@ -1378,13 +1428,14 @@ class BubbleModel(object):
         xi_bb=None, which_ps='bb', Asys=1, **_kw_):
 
         if which_ps == 'bb':
-            jp = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-                xi_bb=xi_bb)
+            jp = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha, xi_bb=xi_bb)
             avg = Q**2
         elif which_ps == 'bd':
             bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
                 self.get_cross_terms(z, separate=True, Q=Q, R=R,
-                    sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb, **_kw_)
+                    sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb,
+                    Rmin=self.effective_grid, **_kw_)
             jp = bd
 
             d_i = self.get_bubble_density(z=z, Q=Q, R=R,
@@ -1407,15 +1458,19 @@ class BubbleModel(object):
         cf[cf == 0] = tiny_cf
 
         # Setup interpolant
-        _fcf = interp1d(np.log(self.tab_R), cf, kind='cubic',
-            bounds_error=False, fill_value=tiny_cf)
-        f_cf = lambda RR: _fcf.__call__(np.log(RR))
+        if self.use_mcfit:
+            _k_, _ps_ = get_ps_from_cf_tab(self.tab_R, cf)
+            ps = np.interp(np.log(k), np.log(_k_), _ps_)
+        else:
+            _fcf = interp1d(np.log(self.tab_R), cf, kind='cubic',
+                bounds_error=False, fill_value=tiny_cf)
+            f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
-        if type(k) != np.ndarray:
-            k = np.array([k])
+            if type(k) != np.ndarray:
+                k = np.array([k])
 
-        ps = get_ps_from_cf(k, f_cf=f_cf,
-            Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
+            ps = get_ps_from_cf_func(k, f_cf=f_cf,
+                Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
         return ps
 
@@ -1440,16 +1495,27 @@ class BubbleModel(object):
                 sigma=sigma, gamma=gamma, alpha=alpha, Asys=Asys, xi_bb=xi_bb,
                 delta_ion=delta_ion)
 
+            # Causes problems for mcfit
+            if self.use_mcfit:
+                if np.any(cf_21 < 0):
+                    print("WARNING: some CF_21 elements < 0. Setting to tiny_cf.")
+                    cf_21[cf_21 < 0] = tiny_cf
+
             # Setup interpolant
-            _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
-                bounds_error=False, fill_value=0.)
-            f_cf = lambda RR: _fcf.__call__(np.log(RR))
+            if self.use_mcfit:
+                _k_, _ps_21 = get_ps_from_cf_tab(self.tab_R, cf_21,
+                    **self.mcfit_kwargs)
+                ps_21 = np.interp(np.log(k), np.log(_k_), _ps_21)
+            else:
+                _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
+                    bounds_error=False, fill_value=0.)
+                f_cf = lambda RR: _fcf.__call__(np.log(RR))
 
-            if type(k) != np.ndarray:
-                k = np.array([k])
+                if type(k) != np.ndarray:
+                    k = np.array([k])
 
-            ps_21 = get_ps_from_cf(k, f_cf=f_cf,
-                Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
+                ps_21 = get_ps_from_cf_func(k, f_cf=f_cf,
+                    Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
         return ps_21
 

@@ -22,6 +22,12 @@ try:
 except ImportError:
     pb = False
 
+try:
+    from mcfit import P2xi, xi2P
+    have_mcfit = True
+except ImportError:
+    have_mcfit = False
+
 labels = \
 {
  'R': r'$R / [h^{-1} \ \mathrm{Mpc}]$',
@@ -41,8 +47,29 @@ labels = \
  'bsd_normed': r'$Q^{-1} V dn/d\log R$',
 }
 
-def get_cf_from_ps(R, f_ps, kmin=1e-4, kmax=5000., rtol=1e-5, atol=1e-5):
+def get_cf_from_ps_tab(k, ps, **kwargs):
+    assert have_mcfit, "Must install mcfit! See `use_mcfit` parameter."
 
+    cf_func = P2xi(k, **kwargs)
+    R, cf = cf_func(ps, extrap=True)
+
+    if R[1] < R[0]:
+        return R[-1::-1], cf[-1::-1]
+    else:
+        return R, cf
+
+def get_ps_from_cf_tab(R, cf, **kwargs):
+    assert have_mcfit, "Must install mcfit! See `use_mcfit` parameter."
+
+    ps_func = xi2P(R, **kwargs)
+    k, ps = ps_func(cf, extrap=True)
+
+    if k[1] < k[0]:
+        return k[-1::-1], ps[-1::-1]
+    else:
+        return k, ps
+
+def get_cf_from_ps_func(R, f_ps, kmin=1e-4, kmax=5000., rtol=1e-5, atol=1e-5):
     cf = np.zeros_like(R)
     for i, RR in enumerate(R):
 
@@ -70,7 +97,7 @@ def get_cf_from_ps(R, f_ps, kmin=1e-4, kmax=5000., rtol=1e-5, atol=1e-5):
 
     return cf
 
-def get_ps_from_cf(k, f_cf, Rmin=1e-2, Rmax=1e3, rtol=1e-5, atol=1e-5):
+def get_ps_from_cf_func(k, f_cf, Rmin=1e-2, Rmax=1e3, rtol=1e-5, atol=1e-5):
 
     ps = np.zeros_like(k)
     for i, kk in enumerate(k):
@@ -95,6 +122,11 @@ def get_ps_from_cf(k, f_cf, Rmin=1e-2, Rmax=1e3, rtol=1e-5, atol=1e-5):
             weight='sin', wvar=kk)[0] / norm
 
     return ps
+
+
+# Backward compatibility
+get_cf_from_ps = get_cf_from_ps_func
+get_ps_from_cf = get_ps_from_cf_func
 
 def get_filter(box, R=10, kernel='tophat'):
     _fil_ = np.zeros_like(box)

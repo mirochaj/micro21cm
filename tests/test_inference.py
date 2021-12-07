@@ -17,7 +17,7 @@ import numpy as np
 
 def test():
     # fake command-line arguments
-    sys_argv = ['scriptname', 'steps=2', 'checkpoint=1', 'nwalkers=8',
+    sys_argv = ['scriptname', 'steps=2', 'checkpoint=1', 'nwalkers=10',
         'prior_tau=False', 'bubbles_pdf=lognormal']
 
     kwargs = micro21cm.inference.fit_kwargs.copy()
@@ -43,10 +43,10 @@ def test():
         #return model.get_ps_21cm(z, k, **kw) * k**3 / 2. / np.pi**2
         return kw['Ts'] * ((1. + z) / 8.) * (1. - kw['Q'])
 
-    assert helper.nparams == 4
+    assert helper.nparams == 5, helper.pinfo[0]
     assert helper.fit_z.size == 1
     assert helper.tab_k.size == 2
-    assert helper.pinfo[0] == ['Ts', 'Q', 'R', 'sigma']
+    assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma', 'Asys'], helper.pinfo[0]
 
     def loglikelihood(pars):
 

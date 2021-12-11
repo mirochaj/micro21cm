@@ -19,6 +19,11 @@ exclude_lines =
 	  if rank > 0:
 	  if size > 1:
 
+    # Other parallelism stuff
+    rank = MPI.COMM_WORLD.rank
+    size = MPI.COMM_WORLD.size
+    from schwimmbad import MPIPool
+
     # Don't complain if non-runnable code isn't run:
     if 0:
     if False:

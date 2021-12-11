@@ -45,11 +45,9 @@ except ImportError:
 PATH = os.environ.get("MICRO21CM")
 
 class BubbleModel(object):
-    def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
-        bubbles_via_Rpeak=True, bubbles_model='fzh04',
-        include_adiabatic_fluctuations=True,
-        include_P1=True, include_P2=True,
-        include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
+    def __init__(self, bubbles=True, bubbles_ion=True,
+        bubbles_pdf='lognormal', bubbles_model='fzh04',
+        include_adiabatic_fluctuations=True, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
@@ -80,12 +78,6 @@ class BubbleModel(object):
             R and sigma characterize the PDF, and are the avg and rms of radii for
             'lognormal'. For 'plexp' R is the typical size, and gamma is a power-
             law index for bubbles with radii < R.
-        bubbles_via_Rpeak : bool
-            By default, the parameter 'R' throughput refers to where the BSD
-            peaks, where BSD is dn/dR. To work in terms of the peak in the
-            volume-weighted BSD, R**3 * dn/dlnR, set bubbles_via_Rpeak=True.
-            Then, all R values supplied to class methods will be converted to
-            the scale where dn/dR peaks internally before calling get_bsd.
         include_adiabatic_fluctuations : bool
             If True, inclue a correction factor that accounts for the fact
             that density and kinetic temperature are correlated. Uses
@@ -96,9 +88,6 @@ class BubbleModel(object):
         include_mu_gt : float
             If include_rsd > 0, this sets the lower-bound of the integral
             that averages the 3-D power spectrum over \mu.
-        include_P1_corr : bool
-            If True, apply "kludge" to one bubble terms in order to guarantee
-            that fluctuations vanish as Q -> 1.
         include_cross_terms : bool, int
             If > 0, will allow terms involving both ionization and density to
             be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2021) for
@@ -161,7 +150,6 @@ class BubbleModel(object):
 
         self.bubbles = bubbles
         self.bubbles_ion = bubbles_ion
-        self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.use_pbar = use_pbar
         self.use_mcfit = use_mcfit
         self.effective_grid = effective_grid
@@ -172,11 +160,8 @@ class BubbleModel(object):
         self._dlogk = dlogk
 
         self.bubbles_model = bubbles_model
-        self.include_P1_corr = include_P1_corr
-        self.include_P2_corr = include_P2_corr
         self.include_overlap_corr = include_overlap_corr
-        self.include_P1 = include_P1
-        self.include_P2 = include_P2
+
         self.include_adiabatic_fluctuations = \
             include_adiabatic_fluctuations
         self.include_cross_terms = include_cross_terms
@@ -357,12 +342,14 @@ class BubbleModel(object):
             bsd = np.exp(-(logRarr - logR)**2 / 2. / sigma**2) \
                 / self.tab_R / sigma / np.sqrt(2 * np.pi)
             if alpha != 0:
-                bsd *= (1. + erf(alpha * (logRarr - logR) / sigma / np.sqrt(2.)))
+                bsd *= (1. + erf(alpha * (logRarr - logR) \
+                    / sigma / np.sqrt(2.)))
         elif self.bubbles_pdf in ['normal', 'gaussian']:
             bsd = np.exp(-(self.tab_R - R)**2 / 2. / sigma**2) \
                 / sigma / np.sqrt(2 * np.pi)
             if alpha != 0:
-                bsd *= (1. + erf(alpha * (self.tab_R - R) / sigma / np.sqrt(2.)))
+                bsd *= (1. + erf(alpha * (self.tab_R - R) \
+                    / sigma / np.sqrt(2.)))
         elif self.bubbles_pdf == 'plexp':
             bsd = (self.tab_R / R)**gamma * np.exp(-self.tab_R / R)
         else:
@@ -408,18 +395,17 @@ class BubbleModel(object):
 
         """
 
-        #cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha)
-        #if cached_bsd is not None:
-        #    return cached_bsd
+        cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha)
+        if cached_bsd is not None:
+            return cached_bsd
 
         # In this case, assumes user input is actually peak in V dn/dlogR,
         # convert to peak in dn/dR before calling _get_bsd_unnormalized
         if self.bubbles_pdf == 'user':
             pass
         else:
-            if self.bubbles_via_Rpeak:
-                _R = R * 1
-                R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma)
+            _R = R * 1
+            R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma)
 
         # Should cache bsd too.
         _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
@@ -437,17 +423,13 @@ class BubbleModel(object):
         # Normalize to provided ionized fraction
         bsd = _bsd * corr
 
-        #self._cache_bsd_[(Q, R, sigma, gamma, alpha)] = bsd
+        self._cache_bsd_[(Q, R, sigma, gamma, alpha)] = bsd
 
         return bsd
 
     def get_Rpeak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
         assume_dndlnR=True, **_kw_):
-        if self.bubbles_via_Rpeak:
-            return R
-        else:
-            return self.get_Rpeak_from_R(Q=Q, R=R, sigma=sigma, gamma=gamma,
-                assume_dndlnR=assume_dndlnR)
+        return R
 
     def get_Rpeak_from_R(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
         assume_dndlnR=True, **_kw_):
@@ -623,9 +605,6 @@ class BubbleModel(object):
         Compute 1 bubble term.
         """
 
-        if not self.include_P1:
-            return 0.0
-
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
         V_o = self.get_overlap_vol_arr(d)
@@ -640,26 +619,14 @@ class BubbleModel(object):
 
         if self.bubbles_model == 'fzh04':
             P1 = 1. - np.exp(-integ)
-        elif self.bubbles_model == 'test':
-            P1 = integ * np.exp(-integ)
 
-        if use_corr and self.include_P1_corr:
-            corr = self.get_overlap_corr(d, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, method=self.include_P1_corr,
-                which_vol='tot')
-        else:
-            corr = 1.
-
-        return P1 * corr
+        return P1
 
     def get_P2(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., xi_bb=0.,
         use_corr=True):
         """
         Compute 2 bubble term.
         """
-
-        if not self.include_P2:
-            return Q**2
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -674,19 +641,8 @@ class BubbleModel(object):
 
         if self.bubbles_model == 'fzh04':
             P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
-        elif self.bubbles_model == 'test':
-            #P2 = (integ1 * np.exp(-integ1))**2
-            P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
 
-        if use_corr and self.include_P2_corr:
-            corr = self.get_overlap_corr(d, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, method=self.include_P2_corr,
-                which_vol='x')
-
-        else:
-            corr = 1.
-
-        return P2 * corr
+        return P2
 
     def get_PN(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         xi_bb=0., use_corr=True, N=1): # pragma: no cover
@@ -758,7 +714,7 @@ class BubbleModel(object):
 
         return self._tab_Vo_3d_
 
-    def get_Vo_2d(self, d):
+    def get_Vo_2d(self, d): # pragma: no cover
         k = np.argmin(np.abs(d - self.tab_R))
         return self.tab_Vo_3d[k]
 
@@ -1168,30 +1124,18 @@ class BubbleModel(object):
             print("User-supplied `Rmin` will override `self.effective_grid`.")
 
         if self.use_volume_match == 1:
-            if self.bubbles_via_Rpeak:
-                Rsm = R
-            else:
-                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-                # convert to dn/dlogR
-                bsd = bsd * self.tab_R
-                # weight by volume
-                bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
-                # Doesn't matter here but OK.
-                bsd = bsd / Q
-                # find peak in V dn/dlnR
-                Rsm = self.tab_R[np.argmax(bsd)]
+            Rsm = R
         elif self.use_volume_match == 2: # pragma: no cover
-            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha)
             # weight by volume
             bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
             # find peak in V dn/dR
             Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 3: # pragma: no cover
-            if self.bubbles_via_Rpeak:
-                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-                Rsm = self.tab_R[np.argmax(bsd)]
-            else:
-                Rsm = R
+            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha)
+            Rsm = self.tab_R[np.argmax(bsd)]
         elif int(self.use_volume_match) == 4: # pragma: no cover
             frac = self.use_volume_match % 4
             bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,

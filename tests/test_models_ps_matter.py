@@ -18,6 +18,7 @@ def test(rtol=1e-2):
     k = np.logspace(-2, 1, 100)
 
     model = micro21cm.BubbleModel(use_mcfit=False)
+    s8 = model.get_sigma8()
 
     # Plot the limits first
     P_mm = np.inf
@@ -28,7 +29,9 @@ def test(rtol=1e-2):
 
         # Compute the matter power spectrum at relevant redshift
         P_mm_z = model.get_ps_matter(z, k)
+        P_mm_z2 = model.get_ps_mm(z, k) # just a wrapper around get_ps_matter
 
+        assert np.all(P_mm_z == P_mm_z2)
         assert np.all(P_mm_z < P_mm)
         P_mm = P_mm_z
 
@@ -39,8 +42,6 @@ def test(rtol=1e-2):
     model_mc = micro21cm.BubbleModel(use_mcfit=True)
 
     s8_mc = np.sqrt(model_mc.get_variance_mm(z=0., r=8.))
-
-    s8 = model.get_sigma8()
 
     err_in = abs(s8_in - s8) / s8
     err_mc = abs(s8_mc - s8) / s8

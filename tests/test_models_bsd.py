@@ -10,6 +10,7 @@ Description:
 
 """
 
+import time
 import micro21cm
 import numpy as np
 import matplotlib.pyplot as pl
@@ -32,7 +33,22 @@ def test():
     assert model_logn.get_dTb_avg(z, Q=0.0) == model_logn.get_dTb_bulk(z=z)
 
     # Check BSDs
+    t1 = time.time()
     bsd_logn = model_logn.get_bsd(Q=0.1, R=2., sigma=1)
+    t2 = time.time()
+    t3 = time.time()
+    bsd_logn2 = model_logn.get_bsd(Q=0.1, R=2., sigma=1)
+    t4 = time.time()
+
+    # Check caching
+    assert (t4-t3) < (t2-t1), \
+        "Caching should speed things up! {} {}".format(t4-t3, t2-t1)
+    assert np.all(bsd_logn == bsd_logn2)
+
+    # Check skewed log-normal
+    bsd_logn_sk_p = model_logn.get_bsd(Q=0.1, R=2., sigma=1, alpha=1)
+    bsd_logn_sk_m = model_logn.get_bsd(Q=0.1, R=2., sigma=1, alpha=-1)
+
     bsd_plex = model_plex.get_bsd(Q=0.1, R=2., gamma=-3.5)
 
     # Test R vs. Rpeak
@@ -61,6 +77,15 @@ def test():
     kw = model_logn.calibrate_ps(k, k**3 * ps_bb / 2. / np.pi**2, Q=0.1, z=z,
         which_ps='bb', xtol=1e-2, sigma=1., free_norm=False)
     assert (abs(kw['R'] - 2.) < 1e-1), 'Recovered R={}'.format(kw['R'])
+
+    # Check some convenience functions
+    cdf = model_logn.get_bsd_cdf(Q=0.1, R=2., sigma=1)
+    R_med = model_logn.tab_R[np.argmin(np.abs(cdf - 0.5))]
+    nb = model_logn.get_nb(Q=0.1, R=2., sigma=1)
+
+    rofk = model_logn.get_r_of_k(z, k, Q=0.1, R=2., sigma=1)
+
+    assert np.all(rofk > 0)
 
 if __name__ == '__main__':
     test()

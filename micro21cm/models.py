@@ -47,9 +47,7 @@ PATH = os.environ.get("MICRO21CM")
 class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
         bubbles_via_Rpeak=True, bubbles_model='fzh04',
-        include_adiabatic_fluctuations=True,
-        include_P1=True, include_P2=True,
-        include_P1_corr=False, include_P2_corr=False, include_overlap_corr=0,
+        include_adiabatic_fluctuations=True, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
@@ -96,9 +94,6 @@ class BubbleModel(object):
         include_mu_gt : float
             If include_rsd > 0, this sets the lower-bound of the integral
             that averages the 3-D power spectrum over \mu.
-        include_P1_corr : bool
-            If True, apply "kludge" to one bubble terms in order to guarantee
-            that fluctuations vanish as Q -> 1.
         include_cross_terms : bool, int
             If > 0, will allow terms involving both ionization and density to
             be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2021) for
@@ -172,11 +167,8 @@ class BubbleModel(object):
         self._dlogk = dlogk
 
         self.bubbles_model = bubbles_model
-        self.include_P1_corr = include_P1_corr
-        self.include_P2_corr = include_P2_corr
         self.include_overlap_corr = include_overlap_corr
-        self.include_P1 = include_P1
-        self.include_P2 = include_P2
+
         self.include_adiabatic_fluctuations = \
             include_adiabatic_fluctuations
         self.include_cross_terms = include_cross_terms
@@ -357,12 +349,14 @@ class BubbleModel(object):
             bsd = np.exp(-(logRarr - logR)**2 / 2. / sigma**2) \
                 / self.tab_R / sigma / np.sqrt(2 * np.pi)
             if alpha != 0:
-                bsd *= (1. + erf(alpha * (logRarr - logR) / sigma / np.sqrt(2.)))
+                bsd *= (1. + erf(alpha * (logRarr - logR) \
+                    / sigma / np.sqrt(2.)))
         elif self.bubbles_pdf in ['normal', 'gaussian']:
             bsd = np.exp(-(self.tab_R - R)**2 / 2. / sigma**2) \
                 / sigma / np.sqrt(2 * np.pi)
             if alpha != 0:
-                bsd *= (1. + erf(alpha * (self.tab_R - R) / sigma / np.sqrt(2.)))
+                bsd *= (1. + erf(alpha * (self.tab_R - R) \
+                    / sigma / np.sqrt(2.)))
         elif self.bubbles_pdf == 'plexp':
             bsd = (self.tab_R / R)**gamma * np.exp(-self.tab_R / R)
         else:
@@ -623,9 +617,6 @@ class BubbleModel(object):
         Compute 1 bubble term.
         """
 
-        if not self.include_P1:
-            return 0.0
-
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
         V_o = self.get_overlap_vol_arr(d)
@@ -640,26 +631,14 @@ class BubbleModel(object):
 
         if self.bubbles_model == 'fzh04':
             P1 = 1. - np.exp(-integ)
-        elif self.bubbles_model == 'test':
-            P1 = integ * np.exp(-integ)
 
-        if use_corr and self.include_P1_corr:
-            corr = self.get_overlap_corr(d, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, method=self.include_P1_corr,
-                which_vol='tot')
-        else:
-            corr = 1.
-
-        return P1 * corr
+        return P1
 
     def get_P2(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0., xi_bb=0.,
         use_corr=True):
         """
         Compute 2 bubble term.
         """
-
-        if not self.include_P2:
-            return Q**2
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -674,19 +653,8 @@ class BubbleModel(object):
 
         if self.bubbles_model == 'fzh04':
             P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
-        elif self.bubbles_model == 'test':
-            #P2 = (integ1 * np.exp(-integ1))**2
-            P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))
 
-        if use_corr and self.include_P2_corr:
-            corr = self.get_overlap_corr(d, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, method=self.include_P2_corr,
-                which_vol='x')
-
-        else:
-            corr = 1.
-
-        return P2 * corr
+        return P2
 
     def get_PN(self, d, Q=0.0, R=5., sigma=0.5, gamma=0., alpha=0.,
         xi_bb=0., use_corr=True, N=1): # pragma: no cover

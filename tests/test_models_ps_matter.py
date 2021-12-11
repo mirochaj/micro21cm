@@ -28,7 +28,9 @@ def test(rtol=1e-2):
 
         # Compute the matter power spectrum at relevant redshift
         P_mm_z = model.get_ps_matter(z, k)
+        P_mm_z2 = model.get_ps_mm(z, k) # just a wrapper around get_ps_matter
 
+        assert np.all(P_mm_z == P_mm_z2)
         assert np.all(P_mm_z < P_mm)
         P_mm = P_mm_z
 

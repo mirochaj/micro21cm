@@ -18,7 +18,8 @@ import numpy as np
 def test():
     # fake command-line arguments
     sys_argv = ['scriptname', 'steps=2', 'checkpoint=1', 'nwalkers=10',
-        'prior_tau=False', 'bubbles_pdf=lognormal']
+        'prior_tau=False', 'bubbles_pdf=lognormal', 'Ts_prior=[0,20]',
+        'sigma_val=None']
 
     kwargs = micro21cm.inference.fit_kwargs.copy()
     kwargs.update(micro21cm.get_cmd_line_kwargs(sys_argv))
@@ -82,7 +83,7 @@ def test():
 
     ##
     # Actually run
-    fn = 'test_fit.pkl'
+    fn = '{}.pkl'.format(helper.prefix)
     Ncheckpts = kwargs['steps'] // kwargs['checkpoint'] # just to test restart
     for i in range(Ncheckpts):
         # Set initial positions of walkers

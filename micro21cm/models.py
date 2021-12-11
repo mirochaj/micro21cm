@@ -408,9 +408,9 @@ class BubbleModel(object):
 
         """
 
-        #cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha)
-        #if cached_bsd is not None:
-        #    return cached_bsd
+        cached_bsd = self._cache_bsd(Q, R, sigma, gamma, alpha)
+        if cached_bsd is not None:
+            return cached_bsd
 
         # In this case, assumes user input is actually peak in V dn/dlogR,
         # convert to peak in dn/dR before calling _get_bsd_unnormalized
@@ -437,7 +437,7 @@ class BubbleModel(object):
         # Normalize to provided ionized fraction
         bsd = _bsd * corr
 
-        #self._cache_bsd_[(Q, R, sigma, gamma, alpha)] = bsd
+        self._cache_bsd_[(Q, R, sigma, gamma, alpha)] = bsd
 
         return bsd
 
@@ -1170,8 +1170,9 @@ class BubbleModel(object):
         if self.use_volume_match == 1:
             if self.bubbles_via_Rpeak:
                 Rsm = R
-            else:
-                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+            else: # pragma: no cover
+                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                    alpha=alpha)
                 # convert to dn/dlogR
                 bsd = bsd * self.tab_R
                 # weight by volume

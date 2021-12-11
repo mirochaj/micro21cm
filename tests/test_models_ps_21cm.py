@@ -15,6 +15,7 @@ import numpy as np
 
 def test():
     model = micro21cm.BubbleModel()
+    model_nob = micro21cm.BubbleModel(bubbles=False)
 
     # Set modes of interest
     z = 8.
@@ -29,6 +30,9 @@ def test():
         ps = model.get_ps_21cm(z=z, k=k, Ts=Ts, Q=0.2, R=3., sigma=1)
         assert np.all(ps > ps_pre), "{} {}".format(ps, ps_pre)
         ps_pre = ps
+
+        ps_nob = model_nob.get_ps_21cm(z=z, k=k, Ts=Ts, Q=0.2, R=3., sigma=1)
+        assert np.all(ps > ps_nob)
 
     # Check ability to calibrate to known PS
     kw = model.calibrate_ps(k, k**3 * ps / 2. / np.pi**2, Q=0.2, z=z,

@@ -758,7 +758,7 @@ class BubbleModel(object):
 
         return self._tab_Vo_3d_
 
-    def get_Vo_2d(self, d):
+    def get_Vo_2d(self, d): # pragma: no cover
         k = np.argmin(np.abs(d - self.tab_R))
         return self.tab_Vo_3d[k]
 

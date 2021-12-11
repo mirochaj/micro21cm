@@ -45,8 +45,8 @@ except ImportError:
 PATH = os.environ.get("MICRO21CM")
 
 class BubbleModel(object):
-    def __init__(self, bubbles=True, bubbles_ion=True, bubbles_pdf='lognormal',
-        bubbles_via_Rpeak=True, bubbles_model='fzh04',
+    def __init__(self, bubbles=True, bubbles_ion=True,
+        bubbles_pdf='lognormal', bubbles_model='fzh04',
         include_adiabatic_fluctuations=True, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
@@ -78,12 +78,6 @@ class BubbleModel(object):
             R and sigma characterize the PDF, and are the avg and rms of radii for
             'lognormal'. For 'plexp' R is the typical size, and gamma is a power-
             law index for bubbles with radii < R.
-        bubbles_via_Rpeak : bool
-            By default, the parameter 'R' throughput refers to where the BSD
-            peaks, where BSD is dn/dR. To work in terms of the peak in the
-            volume-weighted BSD, R**3 * dn/dlnR, set bubbles_via_Rpeak=True.
-            Then, all R values supplied to class methods will be converted to
-            the scale where dn/dR peaks internally before calling get_bsd.
         include_adiabatic_fluctuations : bool
             If True, inclue a correction factor that accounts for the fact
             that density and kinetic temperature are correlated. Uses
@@ -156,7 +150,6 @@ class BubbleModel(object):
 
         self.bubbles = bubbles
         self.bubbles_ion = bubbles_ion
-        self.bubbles_via_Rpeak = bubbles_via_Rpeak
         self.use_pbar = use_pbar
         self.use_mcfit = use_mcfit
         self.effective_grid = effective_grid
@@ -411,9 +404,8 @@ class BubbleModel(object):
         if self.bubbles_pdf == 'user':
             pass
         else:
-            if self.bubbles_via_Rpeak:
-                _R = R * 1
-                R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma)
+            _R = R * 1
+            R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma)
 
         # Should cache bsd too.
         _bsd = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
@@ -437,11 +429,7 @@ class BubbleModel(object):
 
     def get_Rpeak(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
         assume_dndlnR=True, **_kw_):
-        if self.bubbles_via_Rpeak:
-            return R
-        else:
-            return self.get_Rpeak_from_R(Q=Q, R=R, sigma=sigma, gamma=gamma,
-                assume_dndlnR=assume_dndlnR)
+        return R
 
     def get_Rpeak_from_R(self, Q=0., sigma=0.5, R=5., gamma=0., alpha=0.,
         assume_dndlnR=True, **_kw_):
@@ -1136,31 +1124,18 @@ class BubbleModel(object):
             print("User-supplied `Rmin` will override `self.effective_grid`.")
 
         if self.use_volume_match == 1:
-            if self.bubbles_via_Rpeak:
-                Rsm = R
-            else: # pragma: no cover
-                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
-                    alpha=alpha)
-                # convert to dn/dlogR
-                bsd = bsd * self.tab_R
-                # weight by volume
-                bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
-                # Doesn't matter here but OK.
-                bsd = bsd / Q
-                # find peak in V dn/dlnR
-                Rsm = self.tab_R[np.argmax(bsd)]
+            Rsm = R
         elif self.use_volume_match == 2: # pragma: no cover
-            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha)
             # weight by volume
             bsd = bsd * 4. * np.pi * self.tab_R**3 / 3.
             # find peak in V dn/dR
             Rsm = self.tab_R[np.argmax(bsd)]
         elif self.use_volume_match == 3: # pragma: no cover
-            if self.bubbles_via_Rpeak:
-                bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-                Rsm = self.tab_R[np.argmax(bsd)]
-            else:
-                Rsm = R
+            bsd = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha)
+            Rsm = self.tab_R[np.argmax(bsd)]
         elif int(self.use_volume_match) == 4: # pragma: no cover
             frac = self.use_volume_match % 4
             bb1, bb2 = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,

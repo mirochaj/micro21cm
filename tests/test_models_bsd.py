@@ -45,6 +45,10 @@ def test():
         "Caching should speed things up! {} {}".format(t4-t3, t2-t1)
     assert np.all(bsd_logn == bsd_logn2)
 
+    # Check skewed log-normal
+    bsd_logn_sk_p = model_logn.get_bsd(Q=0.1, R=2., sigma=1, alpha=1)
+    bsd_logn_sk_m = model_logn.get_bsd(Q=0.1, R=2., sigma=1, alpha=-1)
+
     bsd_plex = model_plex.get_bsd(Q=0.1, R=2., gamma=-3.5)
 
     # Test R vs. Rpeak

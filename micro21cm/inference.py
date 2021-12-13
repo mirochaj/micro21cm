@@ -86,8 +86,10 @@ _guesses_T_pl = {'p0': (0., 1.5), 'p1': (-10, 3.)} # recall: power_law_lognorm
 _guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl,
      'pl': _guesses_T_pl}
 
+_guesses_s_lin = {'p0': (0.5, 1.5), 'p1': (-0.5, 0.5)}
 _guesses_s_pl = {'p0': (0.3, 1.5), 'p1': (-0.5, 0.5)}
-_guesses_s = {'pl': _guesses_s_pl, 'broad': _guesses_broad['sigma']}
+_guesses_s = {'pl': _guesses_s_pl, 'linear': _guesses_s_lin,
+    'broad': _guesses_broad['sigma']}
 
 _guesses_g = {'broad': _guesses_broad['gamma']}
 
@@ -107,8 +109,10 @@ _priors_R_pl = {'p0': (0, 30), 'p1': (0, 5)}
 _priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
 
 _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
+_priors_s_lin = {'p0': (0.0, 2), 'p1': (-2, 2)}
 
-_priors_s = {'pl': _priors_s_pl, 'broad': _priors_broad['sigma']}
+_priors_s = {'pl': _priors_s_pl, 'linear': _priors_s_lin,
+    'broad': _priors_broad['sigma']}
 
 _priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 8), 'p3': (-6, 0)}
 _priors_T_pl = {'p0': (-1, 3), 'p1': (-20, 5)}
@@ -521,7 +525,7 @@ class FitHelper(object):
         elif par == 'R':
             return self.func_R
         elif par == 'sigma':
-            return self.func_s
+            return self.func_sigma
         elif par == 'gamma':
             return self.func_gamma
         elif par == 'Ts':
@@ -720,7 +724,7 @@ class FitHelper(object):
             param_names.extend(['R_p0', 'R_p1'])
 
         if self.func_sigma is not None:
-            assert self.kwargs['sigma_func'] == 'pl'
+            assert self.kwargs['sigma_func'] in ['pl', 'linear']
             param_z.extend([-np.inf]*2)
             param_names.extend(['sigma_p0', 'sigma_p1'])
 

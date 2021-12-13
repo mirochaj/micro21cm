@@ -16,7 +16,7 @@ from .models import BubbleModel
 from scipy.ndimage.filters import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, double_power_law, \
-    extract_params, power_law_lognorm, erf_Q, power_law_Q
+    extract_params, power_law_lognorm, erf_Q, power_law_Q, lin_Q
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 try:
@@ -600,7 +600,7 @@ class AnalyzeFit(object): # pragma: no cover
             ibest = ibest[0]
 
         # First, deal with parametric results if we have them.
-        for _par_ in ['Q', 'R', 'Ts', 'Asys']:
+        for _par_ in ['Q', 'R', 'Ts', 'sigma', 'Asys']:
             if (par != _par_):
                 continue
 
@@ -622,6 +622,8 @@ class AnalyzeFit(object): # pragma: no cover
 
             if fname == 'tanh':
                 func = tanh_generic
+            elif fname == 'linear':
+                func = lin_Q
             elif fname == 'pl':
                 if _par_ == 'Q':
                     func = power_law_max1
@@ -649,7 +651,7 @@ class AnalyzeFit(object): # pragma: no cover
 
             # Make Q(z) for each MCMC sample
             if use_best:
-                if par in ['R', 'Asys']:
+                if par in ['R', 'sigma', 'Asys']:
                     ybest = func(_default_Q, pbest)
                     ax.plot(_default_Q, ybest, **kwargs)
                 else:
@@ -716,7 +718,7 @@ class AnalyzeFit(object): # pragma: no cover
             if par in ['Ts', 'R']:
                 ax.set_yscale('log')
 
-            if par in ['R', 'Asys']:
+            if par in ['R', 'sigma', 'Asys']:
                 ax.set_xlabel(r'$Q$')
                 ax.set_xlim(0, 1)
             else:

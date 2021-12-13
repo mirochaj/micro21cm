@@ -64,7 +64,7 @@ def test():
     pars8 = helper.get_param_dict(z=8, args=pos[0])
     pars10 = helper.get_param_dict(z=10, args=pos[0])
 
-    for _par_ in ['Q', 'Ts', 'R']:
+    for _par_ in ['Q', 'R']:
         assert pars8[_par_] > pars10[_par_]
 
     def loglikelihood(pars):

@@ -187,9 +187,6 @@ fit_kwargs = \
 
 }
 
-Q_stagger = lambda z: 1. - min(1, max(0, (z - 5.) / 5.))
-R_stagger = lambda z: ((z - 5.) / 5.)**-2
-
 _normal = lambda x, p0, p1, p2: p0 * np.exp(-(x - p1)**2 / 2. / p2**2)
 
 def lin_Q(Q, pars):
@@ -588,20 +585,9 @@ class FitHelper(object):
         # Can parameterize change in Q, R, rather than Q, R
         # themselves.
         if par == 'Q':
-            if self.fit_z.size == 1:
-                lo, hi = 0, 1
-            else:
-                Q0 = Q_stagger(redshifts[i])
-                dQ = 1. / float(max(len(self.fit_zindex) - 1, 1))
-
-                lo = Q0 - 0.5 * dQ
-                hi = Q0 + 0.5 * dQ
+            lo, hi = 0, 1
         if par == 'R':
-            R0 = R_stagger(redshifts[i])
-            dR = 1. / float(max(len(self.fit_zindex) - 1, 1))
-
-            lo = R0 - 0.5 * dR
-            hi = R0 + 0.5 * dR
+            lo, hi = 0.1, 20
         elif self.kwargs['{}_prior'.format(par)] is not None:
             lo1, hi1 = _guesses[par]['broad']
             lo2, hi2 = self.kwargs['{}_prior'.format(par)]

@@ -128,8 +128,6 @@ fit_kwargs = \
 
  'prior_tau': False,
  'prior_GP': False,
- 'Qxdelta': False, # Otherwise, vary *increments* in Q.
- 'Rxdelta': False, # Otherwise, vary *increments* in Q.
 
  'Q_func': None,
  'R_func': None,
@@ -158,8 +156,6 @@ fit_kwargs = \
  'sigma_prior': None,
  'gamma_prior': None,
  'Asys_prior': None,
-
- 'Rpeak_prior': _priors_broad['R'],
 
  'Q_monotonic': False,
  'R_monotonic': False,
@@ -312,15 +308,6 @@ class FitHelper(object):
 
     def get_model_kwargs(self):
         kw = self.kwargs.copy()
-        #if self.kwargs['bubbles_ion']:
-        #    kw['bubbles_ion'] = True
-        #else:
-        #    kw['bubbles_ion'] = False
-#
-        #kw['bubbles_pdf'] = self.kwargs['bubbles_pdf']
-        #kw['include_rsd'] = self.kwargs['include_rsd']
-        #kw['bubbles_Rfree'] = self.kwargs['Rfree']
-
         return kw
 
     @property
@@ -403,18 +390,12 @@ class FitHelper(object):
             if kwargs['Q_func'] is not None:
                 prefix += '_Q{}'.format(kwargs['Q_func'])
             else:
-                if kwargs['Qxdelta']:
-                    prefix += '_vdQ'
-
                 if kwargs['Q_monotonic']:
                     s_prior += 'Qmon'
 
             if kwargs['R_func'] is not None:
                 prefix += '_R{}'.format(kwargs['R_func'])
             else:
-                if kwargs['Rxdelta']:
-                    prefix += '_vdR'
-
                 if kwargs['R_monotonic']:
                     s_prior += 'Rmon'
 
@@ -606,9 +587,7 @@ class FitHelper(object):
 
         # Can parameterize change in Q, R, rather than Q, R
         # themselves.
-        if (par == 'Q') and self.kwargs['Qxdelta']:
-            lo, hi = 0, 0.2
-        elif par == 'Q':
+        if par == 'Q':
             if self.fit_z.size == 1:
                 lo, hi = 0, 1
             else:
@@ -617,9 +596,7 @@ class FitHelper(object):
 
                 lo = Q0 - 0.5 * dQ
                 hi = Q0 + 0.5 * dQ
-        elif (par == 'R') and self.kwargs['Rxdelta']:
-            lo, hi = 0, 2
-        elif par == 'R':
+        if par == 'R':
             R0 = R_stagger(redshifts[i])
             dR = 1. / float(max(len(self.fit_zindex) - 1, 1))
 
@@ -933,8 +910,8 @@ class FitHelper(object):
         model = self.model
         params, redshifts = self.get_param_info()
 
-        parevol = {par: [] for par in self.model.params}
         for i, par_id in enumerate(params):
+
             if np.isinf(redshifts[i]):
                 lo, hi = self.get_priors_func(par_id)
             else:
@@ -947,34 +924,22 @@ class FitHelper(object):
                 else:
                     lo, hi = _priors[par]['broad']
 
-            parevol[par].append(args[i])
-
             if not (lo <= args[i] <= hi):
                 return -np.inf
 
-        for par in self.model.params:
-            if not self.kwargs['{}_monotonic'.format(par)]:
-                continue
-            if (self.kwargs['{}_func'.format(par)]) is not None:
-                continue
-            if not np.all(np.diff(parevol[par]) < 0):
-                return -np.inf
-
+        #for par in self.model.params:
+        #    if not self.kwargs['{}_monotonic'.format(par)]:
+        #        continue
+        #    if (self.kwargs['{}_func'.format(par)]) is not None:
+        #        continue
 
         # Check to make sure peak in R^3 * dn/dlnR is within prior too?
-        if self.kwargs['Rpeak_prior'] is not None:
-            lo, hi = _priors['R']['broad']
-            for z in self.fit_z:
-                pars_dict = self.get_param_dict(z, args)
-
-                if not model.bubbles_via_Rpeak:
-                    Rp = self.model.get_Rpeak_from_R(assume_dndlnR=True,
-                        **pars_dict)
-                else:
-                    Rp = pars_dict['R']
-
-                if not (lo <= Rp <= hi):
-                    return -np.inf
+        lo, hi = _priors['R']['broad']
+        for z in self.fit_z:
+            pars_dict = self.get_param_dict(z, args)
+            Rp = pars_dict['R']
+            if not (lo <= Rp <= hi):
+                return -np.inf
 
         ##
         # Check for priors on Q(z=late in reionization)

@@ -1,6 +1,6 @@
 """
 
-test_inference.py
+test_inference_singlez.py
 
 Author: Jordan Mirocha
 Affiliation: McGill University
@@ -16,6 +16,25 @@ import micro21cm
 import numpy as np
 
 def test():
+
+    # Make sure parametric functions work
+    xarr = np.arange(0, 1, 0.1)
+    zarr = np.arange(6, 11, 1)
+    micro21cm.inference.lin_Q(xarr, [0.2, 1])
+    micro21cm.inference.erf_Q(xarr, [0.5, 0.2, 0.0])
+    micro21cm.inference.tanh_generic(zarr, [8, 2])
+    micro21cm.inference.power_law(zarr, [10., 2])
+    micro21cm.inference.power_law_Q(xarr, [10, 2])
+    micro21cm.inference.power_law_lognorm(xarr, [1, 2])
+    micro21cm.inference.power_law_max1(zarr, [0.1, -2])
+    micro21cm.inference.broken_power_law(zarr, [1, 10, -2, 2])
+    micro21cm.inference.broken_power_law(9., [1, 10, -2, 2])
+    micro21cm.inference.broken_power_law_max1(zarr, [1, 10, -2, 2])
+    micro21cm.inference.double_power_law(zarr, [1, 10, -2, 2])
+
+    ##
+    # Actually run a (very simple) fit.
+
     # fake command-line arguments
     sys_argv = ['scriptname', 'steps=3', 'checkpoint=1', 'nwalkers=10',
         'prior_tau=False', 'bubbles_pdf=lognormal', 'Ts_prior=[0,20]',

@@ -38,11 +38,13 @@ class Box(BubbleModel):
     A class for making 3-d realizations of our phenomenological model or other
     toy models for reionization.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, use_h5py=True, **kwargs):
         """
         Treat this just like a BubbleModel instance.
         """
         BubbleModel.__init__(self, **kwargs)
+
+        self.use_h5py = use_h5py and have_h5py
 
     def get_box_path(self, Q, z=None, which_box='bubbles',
         allow_partial_ionization=0, path='.', Lbox=100., vox=1., **kwargs):
@@ -125,7 +127,7 @@ class Box(BubbleModel):
                 + self.get_box_name(_Q_, which_box=which_box, Lbox=Lbox, vox=vox) \
                 + '.hdf5'
 
-            if not have_h5py:
+            if not self.use_h5py:
                 fn = fn.replace('hdf5', 'pkl')
 
             if os.path.exists(fn) and (not clobber):
@@ -136,7 +138,7 @@ class Box(BubbleModel):
                 allow_partial_ionization=allow_partial_ionization, seed=seeds[i],
                 **kwargs)
 
-            if have_h5py:
+            if self.use_h5py:
                 with h5py.File(fn, 'w') as f:
                     f.create_dataset(which_box, data=box)
             else:
@@ -148,7 +150,7 @@ class Box(BubbleModel):
         pb.finish()
 
     def load_box(self, path='.', Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., use_kdtree=True, which_box='bubbles',
+        R=5., sigma=0.5, gamma=0., which_box='bubbles',
         allow_partial_ionization=True, z=None, seed=None):
 
         path = self.get_box_path(Q, z=z, which_box=which_box,
@@ -160,11 +162,11 @@ class Box(BubbleModel):
                 seed=seed) \
             + '.hdf5'
 
-        if not have_h5py:
+        if not self.use_h5py:
             fn = fn.replace('hdf5', 'pkl')
 
         if os.path.exists(fn):
-            if have_h5py:
+            if self.use_h5py:
                 with h5py.File(fn, 'r') as f:
                     data = np.array(f[(which_box)])
             else:
@@ -179,12 +181,13 @@ class Box(BubbleModel):
 
         return None
 
-    def get_box_density(self, z, vox=1., Lbox=100.):
+    def get_box_density(self, z, vox=1., Lbox=100., seed=None):
         """
         Create a density box using Steven Murray's `powerbox` package.
         """
 
-        box_disk = self.load_box(z=z, Lbox=Lbox, vox=vox, which_box='density')
+        box_disk = self.load_box(z=z, Lbox=Lbox, vox=vox, which_box='density',
+            seed=None)
 
         if box_disk is not None:
             return box_disk
@@ -193,13 +196,15 @@ class Box(BubbleModel):
 
         Npix = int(Lbox / vox)
         assert Lbox / vox % 1 == 0
+
+        np.random.seed(seed)
         rho = pbox.LogNormalPowerBox(N=Npix, dim=3, pk=power,
             boxlength=Lbox).delta_x()
 
         return rho
 
     def get_box_21cm(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., use_kdtree=True, path='.',
+        R=5., sigma=0.5, gamma=0., path='.',
         allow_partial_ionization=True, seed=None):
 
         box_disk = self.load_box(path=path, Q=Q, z=z, which_box='21cm',
@@ -210,14 +215,14 @@ class Box(BubbleModel):
             return box_disk
 
         xHI, Nb = self.get_box_bubbles(z, Lbox=Lbox, vox=vox, Q=Q,
-            R=R, sigma=sigma, gamma=gamma, use_kdtree=use_kdtree, seed=seed,
+            R=R, sigma=sigma, gamma=gamma, seed=seed,
             allow_partial_ionization=allow_partial_ionization)
 
         # Set bulk IGM temperature
         T0 = self.get_dTb_bulk(z, Ts=Ts)
 
         # Density box, no correlation with bubble box.
-        rho = self.get_box_density(z, vox, Lbox)
+        rho = self.get_box_density(z, vox, Lbox, seed=seed)
 
         # Brightness temperature box
         dTb = T0 * xHI * (1. + rho)
@@ -237,7 +242,7 @@ class Box(BubbleModel):
             return None
 
     def get_box_bubbles(self, z, Lbox=100., vox=1., Q=0.5,  R=5., sigma=0.5,
-        gamma=0., use_kdtree=True, allow_partial_ionization=False, seed=None,
+        gamma=0., allow_partial_ionization=False, seed=None,
         path='.', **_kw_):
         """
         Make a 3-d realization of the bubble field.
@@ -253,8 +258,6 @@ class Box(BubbleModel):
             Linear dimension of box to 'simulate' in [cMpc / h].
         vox : int, float
             Linear dimension of voxels in [cMpc / h].
-        use_kdtree : bool
-            If True, uses kdtree to speed-up placement of bubbles in volume.
         include_rho : bool
             If True, use Steven Murray's powerbox package to generate a 3-D
             realization of the density field and multiply box by (1 + delta).
@@ -269,7 +272,7 @@ class Box(BubbleModel):
 
         """
 
-        args = (z, Lbox, vox, Q, R, sigma, gamma, use_kdtree,
+        args = (z, Lbox, vox, Q, R, sigma, gamma,
             allow_partial_ionization, seed)
 
         cached_result = self._cache_box('bubbles', args)
@@ -315,24 +318,12 @@ class Box(BubbleModel):
         box = np.ones([binc.size]*3)
         box_tot = np.zeros([binc.size]*3)
 
-        # Can speed things up with a kdtree if you want.
-        if use_kdtree:
-            pos = np.array([xx.ravel(), yy.ravel(), zz.ravel()]).T
-            kdtree = cKDTree(pos, boxsize=Lbox)
+        # Speed things up with a kdtree.
+        pos = np.array([xx.ravel(), yy.ravel(), zz.ravel()]).T
+        kdtree = cKDTree(pos, boxsize=Lbox)
 
         # Loop over bubbles and flag all cells within them
         for h in range(p_bin.shape[0]):
-
-            ##
-            # Brute force: would not recommend.
-            if not use_kdtree:
-                i, j, k = p_bin[h]
-                dr = np.sqrt((xx - xx[i,j,k])**2 + (yy - yy[i,j,k])**2 \
-                   + (zz - zz[i,j,k])**2)
-                in_bubble = dr <= R_r[h]
-                box[in_bubble] = 0
-                box_tot[in_bubble] += 1
-                continue
 
             ##
             # Speed-up with kdtree
@@ -405,7 +396,7 @@ class Box(BubbleModel):
             pb.update(i)
 
             box, box_tot = self.get_box_bubbles(z=np.inf, Lbox=Lbox, vox=vox,
-                Q=_Q_, R=R, sigma=sigma, gamma=gamma, use_kdtree=True, seed=seed,
+                Q=_Q_, R=R, sigma=sigma, gamma=gamma, seed=seed,
                 allow_partial_ionization=allow_partial_ionization)
 
             box_sm = smooth_box(box, R=Rsm, periodic=True).real
@@ -505,7 +496,7 @@ class Box(BubbleModel):
             pb.update(i)
 
             box, box_tot = self.get_box_bubbles(z=np.inf, Lbox=Lbox, vox=vox,
-                Q=_Q_, R=R, sigma=sigma, gamma=gamma, use_kdtree=True, seed=seed,
+                Q=_Q_, R=R, sigma=sigma, gamma=gamma, seed=seed,
                 allow_partial_ionization=allow_partial_ionization)
             Npix = box.shape[0]
 

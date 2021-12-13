@@ -17,9 +17,9 @@ import numpy as np
 
 def test():
     # fake command-line arguments
-    sys_argv = ['scriptname', 'steps=2', 'checkpoint=1', 'nwalkers=10',
+    sys_argv = ['scriptname', 'steps=3', 'checkpoint=1', 'nwalkers=10',
         'prior_tau=False', 'bubbles_pdf=lognormal', 'Ts_prior=[0,20]',
-        'sigma_val=None']
+        'Ts_log10=False', 'sigma_val=None', 'regroup_after=2']
 
     kwargs = micro21cm.inference.fit_kwargs.copy()
     kwargs.update(micro21cm.get_cmd_line_kwargs(sys_argv))
@@ -48,6 +48,9 @@ def test():
     assert helper.fit_z.size == 1
     assert helper.tab_k.size == 2
     assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma', 'Asys'], helper.pinfo[0]
+    assert np.isfinite(helper.get_prior([0.1, 10., 5., 1., 1.]))
+
+    pars = helper.get_param_dict(z=8, args=[0.1, 10., 5., 1., 1.])
 
     def loglikelihood(pars):
 

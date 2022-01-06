@@ -49,9 +49,11 @@ def test():
 
     # Check that we get 0 if Q=0
     bb = model_logn.get_bb(z, Q=0)
-    bb1, bb2 = model_logn.get_bb(z, Q=0, separate=True)
     assert np.allclose(bb, 0)
-    assert np.allclose(bb1+bb2, 0)
+
+    # Check limiting behaviour
+    bb1, bb2 = model_logn.get_bb(z, Q=0.1, separate=True)
+    assert np.allclose(bb2[-1] , 0.1**2), bb2[-1]
 
     # Check caching
     assert (t4-t3) < (t2-t1), \

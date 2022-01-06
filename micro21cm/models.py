@@ -841,11 +841,13 @@ class BubbleModel(object):
 
         if xi_bb is None:
             xi_bb = np.zeros_like(self.tab_R)
-        elif type(xi_bb) != np.ndarray:
-            xi_bb = xi_bb * np.ones_like(self.tab_R)
         else:
-            # Assumes it's the same for all bubbles
-            assert xi_bb.size == self.tab_R.size
+            raise NotImplemented("No support for bubble clustering yet!")
+        #elif type(xi_bb) != np.ndarray:
+        #    xi_bb = xi_bb * np.ones_like(self.tab_R)
+        #else:
+        #    # Assumes it's the same for all bubbles
+        #    assert xi_bb.size == self.tab_R.size
 
         P1 = np.zeros_like(self.tab_R)
         P2 = np.zeros_like(self.tab_R)
@@ -861,7 +863,7 @@ class BubbleModel(object):
         pb.finish()
 
         if separate:
-            return P1, (1 - P1) * P2#, P12
+            return P1, (1 - P1) * P2
         else:
             if self.bubbles_model == 'fzh04':
                 return P1 + (1 - P1) * P2
@@ -1312,12 +1314,8 @@ class BubbleModel(object):
 
         avg_term = _alpha**2 * Q**2
 
-        if self.include_overlap_corr:
-            corr = self.get_overlap_corr(0.0, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, method=self.include_overlap_corr,
-                which_vol='tot')
-        else:
-            corr = 1.
+        # Could replace with get_overlap_corr someday
+        corr = 1.
 
         bb *= corr
         avg_term *= corr
@@ -1379,12 +1377,8 @@ class BubbleModel(object):
         else:
             raise NotImplemented('help')
 
-        if self.include_overlap_corr:
-            corr = self.get_overlap_corr(0.0, Q=Q, R=R, sigma=sigma,
-                gamma=gamma, alpha=alpha, method=self.include_overlap_corr,
-                which_vol='tot')
-        else:
-            corr = Asys if which_ps == 'bb' else np.sqrt(Asys)
+        # Could also introduce get_overlap_corr here
+        corr = Asys if which_ps == 'bb' else np.sqrt(Asys)
 
         cf = (jp - avg) * corr
 

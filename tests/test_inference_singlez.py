@@ -29,6 +29,8 @@ def test():
     micro21cm.inference.power_law_max1(zarr, [0.1, -2])
     micro21cm.inference.broken_power_law(zarr, [1, 10, -2, 2])
     micro21cm.inference.broken_power_law(9., [1, 10, -2, 2])
+    micro21cm.inference.broken_power_law(9.,
+        np.array([1, 10, -2, 2]*10).reshape(4, 10))
     micro21cm.inference.broken_power_law_max1(zarr, [1, 10, -2, 2])
     micro21cm.inference.double_power_law(zarr, [1, 10, -2, 2])
 
@@ -68,6 +70,7 @@ def test():
     assert helper.tab_k.size == 2
     assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma', 'Asys'], helper.pinfo[0]
     assert np.isfinite(helper.get_prior([0.1, 10., 5., 1., 1.]))
+    assert np.all(helper.k_mask == 0)
 
     pars = helper.get_param_dict(z=8, args=[0.1, 10., 5., 1., 1.])
 

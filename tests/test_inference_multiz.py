@@ -17,10 +17,11 @@ import numpy as np
 
 def test():
     # fake command-line arguments
-    sys_argv = ['scriptname', 'steps=1', 'checkpoint=1', 'nwalkers=12',
+    sys_argv = ['scriptname', 'steps=1', 'checkpoint=1', 'nwalkers=16',
         'prior_tau=True', 'bubbles_pdf=lognormal', 'Ts_prior=[0,20]',
         'Ts_log10=False', 'prior_GP=[5.3,0.99]', 'Q_func=pl', 'Ts_func=pl',
-        'R_func=pl', 'sigma_val=1', 'Asys_val=1', 'fit_z=[0,1]']
+        'R_func=pl', 'sigma_const=1', 'Asys_val=1', 'fit_z=[0,1]',
+        'nonsense=hello_123']
 
     kwargs = micro21cm.inference.fit_kwargs.copy()
     kwargs.update(micro21cm.get_cmd_line_kwargs(sys_argv))
@@ -50,12 +51,17 @@ def test():
     def get_ps(z, k, **kw):
         return helper.model.get_ps_21cm(z, k, **kw) * k**3 / 2. / np.pi**2
 
-    par_list = ['Q_p0', 'Q_p1', 'Ts_p0', 'Ts_p1', 'R_p0', 'R_p1']
+    par_list = ['sigma', 'Q_p0', 'Q_p1', 'Ts_p0', 'Ts_p1', 'R_p0', 'R_p1']
 
-    assert helper.nparams == 6, helper.pinfo[0]
+    assert helper.nparams == 7, helper.pinfo[0]
     assert helper.fit_z.size == 2
     assert helper.tab_k.size == 2
     assert helper.pinfo[0] == par_list, helper.pinfo[0]
+    assert helper.num_parametric == 3
+    assert helper.func_sigma == None
+    assert helper.func('sigma') is None
+    assert helper.func_gamma == None
+    assert helper.func('gamma') is None
 
     pos = helper.get_initial_walker_pos()
 
@@ -70,6 +76,9 @@ def test():
     def loglikelihood(pars):
 
         blobs = -np.inf * np.ones((helper.fit_z.size, helper.tab_k.size))
+
+        # Get prior (unenforced in this test to make sure model is called)
+        lnP = helper.get_prior(pars)
 
         lnL = None
         for h, _z_ in enumerate(helper.fit_z):

@@ -201,12 +201,7 @@ def get_cmd_line_kwargs(argv):
     cmd_line_kwargs = {}
 
     for arg in argv[1:]:
-        try:
-            pre, post = arg.split('=')
-        except ValueError:
-            # To deal with parameter values that have an '=' in them.
-            pre = arg[0:arg.find('=')]
-            post = arg[arg.find('=')+1:]
+        pre, post = arg.split('=')
 
         # Need to do some type-casting
         if post.isdigit():
@@ -222,11 +217,8 @@ def get_cmd_line_kwargs(argv):
             vals = post[1:-1].split(',')
             cmd_line_kwargs[pre] = np.array([float(val) for val in vals])
         else:
-            try:
-                cmd_line_kwargs[pre] = float(post)
-            except ValueError:
-                # strings with underscores will return False from isalpha
-                cmd_line_kwargs[pre] = str(post)
+            print("Don't understand format for cmd-line arg '{}'!".format(arg))
+            print("Moving on...")
 
     return cmd_line_kwargs
 

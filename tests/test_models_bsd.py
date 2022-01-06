@@ -21,10 +21,13 @@ def test():
     k = np.logspace(-1, 0, 5)
 
     model_logn = micro21cm.BubbleModel(bubbles_pdf='lognormal')
+    model_n = micro21cm.BubbleModel(bubbles_pdf='normal')
     model_plex = micro21cm.BubbleModel(bubbles_pdf='plexp')
+    model_nob = micro21cm.BubbleModel(bubbles=False)
 
     # Check alpha
     assert model_logn.get_alpha(z, Ts=np.inf) == -1
+    assert model_nob.get_alpha(z, Ts=np.inf) == 0
 
     model_hot = micro21cm.BubbleModel(bubbles_pdf='lognormal', bubbles_ion=0)
     assert model_hot.get_alpha(z, Ts=10.) not in [0, -1]
@@ -39,6 +42,16 @@ def test():
     t3 = time.time()
     bsd_logn2 = model_logn.get_bsd(Q=0.1, R=2., sigma=1)
     t4 = time.time()
+
+    # Gaussian BSD -- don't really use this but check it.
+    bsd_n1 = model_n.get_bsd(Q=0.1, R=2., sigma=1)
+    bsd_n2 = model_n.get_bsd(Q=0.1, R=2., sigma=1, alpha=2)
+
+    # Check that we get 0 if Q=0
+    bb = model_logn.get_bb(z, Q=0)
+    bb1, bb2 = model_logn.get_bb(z, Q=0, separate=True)
+    assert np.allclose(bb, 0)
+    assert np.allclose(bb1+bb2, 0)
 
     # Check caching
     assert (t4-t3) < (t2-t1), \

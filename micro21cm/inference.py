@@ -161,13 +161,6 @@ fit_kwargs = \
  'gamma_prior': None,
  'Asys_prior': None,
 
- 'Q_monotonic': False,
- 'R_monotonic': False,
- 'Ts_monotonic': False,
- 'sigma_monotonic': False,
- 'gamma_monotonic': False,
- 'Asys_monotonic': False,
-
  'Ts_log10': True,
 
  'kmin': 0.1,
@@ -390,15 +383,9 @@ class FitHelper(object):
 
             if kwargs['Q_func'] is not None:
                 prefix += '_Q{}'.format(kwargs['Q_func'])
-            else:
-                if kwargs['Q_monotonic']:
-                    s_prior += 'Qmon'
 
             if kwargs['R_func'] is not None:
                 prefix += '_R{}'.format(kwargs['R_func'])
-            else:
-                if kwargs['R_monotonic']:
-                    s_prior += 'Rmon'
 
             if kwargs['Ts_func'] is not None:
                 prefix += '_T{}'.format(kwargs['Ts_func'])
@@ -860,7 +847,6 @@ class FitHelper(object):
             elif self.kwargs['{}_val'.format(par)] is not None:
                 pars[par] = self.kwargs['{}_val'.format(par)]
             elif self.kwargs['{}_const'.format(par)] is not None:
-                # gamma only at this point
                 j = allpars.index(par)
                 pars[par] = args[j]
             else:
@@ -916,12 +902,6 @@ class FitHelper(object):
 
             if not (lo <= args[i] <= hi):
                 return -np.inf
-
-        #for par in self.model.params:
-        #    if not self.kwargs['{}_monotonic'.format(par)]:
-        #        continue
-        #    if (self.kwargs['{}_func'.format(par)]) is not None:
-        #        continue
 
         # Check to make sure peak in R^3 * dn/dlnR is within prior too?
         lo, hi = _priors['R']['broad']

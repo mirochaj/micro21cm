@@ -18,7 +18,7 @@ def test(rtol=1e-4):
     model = micro21cm.BubbleModel(bubbles_pdf='lognormal')
 
     R = 2.
-    darr = np.array([0.5, 1., 2., 4])
+    darr = np.array([0.0, 0.1, 0.5, 1., 2., 4])
     Varr = []
 
     for d in darr:
@@ -40,6 +40,12 @@ def test(rtol=1e-4):
 
     Vo = model.get_overlap_vol_generic(d=darr, r1=R, r2=R)
     assert np.allclose(Vo, Varr)
+
+    # Check usage if both arrays
+    Vo1 = model.get_overlap_vol(d=darr[0], R=np.array([R]))
+    Vo2 = model.get_overlap_vol(d=darr[0], R=R)
+    assert np.allclose(Vo1, Vo2)
+
 
 
 if __name__ == '__main__':

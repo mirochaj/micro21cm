@@ -1565,23 +1565,15 @@ class BubbleModel(object):
                 guess = [0.]
             else:
                 guess = [Ts_guess]
-        elif Q <= 0.2:
-            guess = [-0.5, _guess_]
-        elif Q < 0.5:
-            guess = [0.5, _guess_]
-        elif Q < 0.7:
-            guess = [1., _guess_]
-        elif Q < 0.9:
-            guess = [1.2, _guess_]
         else:
-            guess = [1.5, _guess_]
+            # Rough way of making sure we guess bigger bubbles as Q->1.
+            logRguess = 2 * (Q - 0.3)
+            guess = [logRguess, _guess_]
 
         if free_norm:
             guess.append(1.)
 
         popt = fmin(func, guess, maxiter=maxiter, xtol=xtol, ftol=ftol)
-        #popt = fsolve(func, guess, maxfev=maxiter, xtol=ftol,
-        #    factor=0.1)
 
         if fitting_Ts:
             popt2 = fsolve(func, [np.log10(Tcmb *1.1)], maxfev=maxiter,

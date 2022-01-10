@@ -943,6 +943,17 @@ class BubbleModel(object):
         rtol=1e-5, atol=1e-5):
         """
         Compute the variance of some `field`.
+
+        Parameters
+        ----------
+        z : int, float
+            Redshift of interest.
+        r : int, float
+            Smoothing scale [Mpc / h].
+        field : str
+            Which field to compute variance for? Options: 'matter' (or 'mm'),
+            '21cm', ionization field ('bb' or 'xx').
+
         """
 
         if kmax is None:
@@ -1303,6 +1314,24 @@ class BubbleModel(object):
         alpha=0., Asys=1, xi_bb=None, delta_ion=0.):
         """
         Compute the 21-cm correlation function.
+
+        Parameters
+        ----------
+        z : int, float
+            Redshift.
+        k : int, float
+            Mode of interest [in h / Mpc].
+        Q : int, float
+            Mean ionized fraction.
+        Ts : int, float
+            Spin temperature of "bulk" IGM in Kelvin.
+        R  : int, float
+            Typical bubble size, i.e., where peak in bubble size distribution
+            (V dn/dlogR) occurs.
+
+        Returns
+        -------
+        21-cm correlation function, an array with same length as `tab_R`.
         """
 
         bb = 1 * self.get_bb(z, Q, R=R, sigma=sigma, alpha=alpha, gamma=gamma,
@@ -1346,11 +1375,17 @@ class BubbleModel(object):
 
     def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=1, gamma=None, alpha=0.,
         xi_bb=None, Asys=1., **_kw_):
+        """
+        Returns the power spectrum of the bubble field.
+        """
         return self._get_ps_bx(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha, xi_bb=xi_bb, which_ps='bb', Asys=Asys, **_kw_)
 
     def get_ps_bd(self, z, k, Q=0.5, R=5., sigma=1, gamma=None, alpha=0.,
         xi_bb=None, Ts=np.inf, Asys=1., **_kw_):
+        """
+        Returns the cross spectrum between density and the bubble field.
+        """
         ps = self._get_ps_bx(z, k, Q=Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha, xi_bb=xi_bb, which_ps='bd', Asys=Asys, **_kw_)
 
@@ -1358,7 +1393,12 @@ class BubbleModel(object):
 
     def _get_ps_bx(self, z, k, Q=0.5, R=5., sigma=1, gamma=None, alpha=0.,
         xi_bb=None, which_ps='bb', Asys=1, **_kw_):
+        """
+        Returns the cross spectrum of the bubble field and some field `x`.
 
+        .. note :: Only two options right now for `which_ps`, either 'bb' or
+            'bd'.
+        """
         if which_ps == 'bb':
             jp = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
                 alpha=alpha, xi_bb=xi_bb)
@@ -1449,7 +1489,6 @@ class BubbleModel(object):
             # Causes problems for mcfit
             if self.use_mcfit:
                 if np.any(cf_21 < 0):
-                    print("WARNING: some CF_21 elements < 0. Setting to tiny_cf.")
                     cf_21[cf_21 < 0] = tiny_cf
 
             # Setup interpolant

@@ -429,8 +429,7 @@ class AnalyzeFit(object): # pragma: no cover
                 if use_cbar:
                     marker_kw['color'] = cmap.to_rgba(_z_)
 
-                ax.errorbar(data['kblobs'], ydat, yerr.T, fmt='o',
-                    **marker_kw)
+                ax.errorbar(data['kblobs'], ydat, yerr.T, **marker_kw)
 
         ax.set_xlabel(labels['k'])
         ax.set_ylabel(labels['delta_sq'])

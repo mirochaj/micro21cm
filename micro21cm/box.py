@@ -150,7 +150,7 @@ class Box(BubbleModel):
         pb.finish()
 
     def load_box(self, path='.', Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., which_box='bubbles',
+        R=5., sigma=1, gamma=0., which_box='bubbles',
         allow_partial_ionization=True, z=None, seed=None):
 
         path = self.get_box_path(Q, z=z, which_box=which_box,
@@ -204,12 +204,12 @@ class Box(BubbleModel):
         return rho
 
     def get_box_21cm(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=0.5, gamma=0., path='.',
+        R=5., sigma=1, gamma=0., path='.',
         allow_partial_ionization=True, seed=None):
 
         box_disk = self.load_box(path=path, Q=Q, z=z, which_box='21cm',
             allow_partial_ionization=allow_partial_ionization,
-            seed=seed, Lbox=Lbox, vox=vox)
+            seed=seed, Lbox=Lbox, vox=vox, sigma=sigma, R=R)
 
         if box_disk is not None:
             return box_disk
@@ -241,7 +241,7 @@ class Box(BubbleModel):
         else:
             return None
 
-    def get_box_bubbles(self, z, Lbox=100., vox=1., Q=0.5,  R=5., sigma=0.5,
+    def get_box_bubbles(self, z, Lbox=100., vox=1., Q=0.5,  R=5., sigma=1,
         gamma=0., allow_partial_ionization=False, seed=None,
         path='.', **_kw_):
         """

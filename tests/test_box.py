@@ -33,8 +33,10 @@ def test(Lbox=50):
             R=kw['R'], sigma=kw['sigma'])
 
         # Use individual box-generation routines. Should load ionization box.
-        dTb = model.get_box_21cm(z=z, Lbox=Lbox, Ts=Ts, seed=1234, **kw)
-        dTb2 = model.get_box_21cm(z=z, Lbox=Lbox, Ts=Ts, seed=1234, **kw)
+        dTb = model.get_box_21cm(z=z, Lbox=Lbox, Ts=Ts, seed=1234,
+            seed_rho=5678, **kw)
+        dTb2 = model.get_box_21cm(z=z, Lbox=Lbox, Ts=Ts, seed=1234,
+            seed_rho=5678, **kw)
 
         assert np.allclose(dTb, dTb2)
 

@@ -152,6 +152,9 @@ class Box(BubbleModel):
     def load_box(self, path='.', Lbox=100., vox=1., Q=0.0, Ts=np.inf,
         R=5., sigma=1, gamma=0., which_box='bubbles',
         allow_partial_ionization=True, z=None, seed=None):
+        """
+        Try to load pre-existing box if we find an exact match.
+        """
 
         path = self.get_box_path(Q, z=z, which_box=which_box,
             allow_partial_ionization=allow_partial_ionization, path=path,
@@ -205,7 +208,43 @@ class Box(BubbleModel):
 
     def get_box_21cm(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
         R=5., sigma=1, gamma=0., path='.',
-        allow_partial_ionization=True, seed=None):
+        allow_partial_ionization=True, seed=None, seed_rho=None):
+        """
+        Create a 3-D realization of the 21-cm field.
+
+        Parameters
+        ----------
+        z : int, float.
+            Redshift of interest.
+        Lbox : int, float
+            Length of box in cMpc / h.
+        vox : int, float
+            Size of each voxel (linear dimension) in cMpc / h.
+        seed : integer, None
+            For reproducibility, can supply random seed to make sure the
+            same bubble field is generated for, e.g., two boxes of different
+            resolution.
+        seed_rho : integer, None
+            Separate random seed for the density box.
+
+        Q : float
+            Mean ionized fraction [0 <= Q <= 1].
+        Ts : int, float
+            Spin temperature in "bulk" IGM [Kelvin].
+        R : int, float
+            Typical bubble size, i.e., where the bubble size distribution
+            V * dn/dlogR peaks.
+        sigma : int, float
+            Width of log-normal bubble size distribution.
+        gamma : int, float
+            If using pl*exp BSD, this is the power-law index.
+
+        Returns
+        -------
+        3-D realization of the field, i.e., a 3-D numpy array where each voxel
+        is the brightness temperature in mK.
+
+        """
 
         box_disk = self.load_box(path=path, Q=Q, z=z, which_box='21cm',
             allow_partial_ionization=allow_partial_ionization,
@@ -222,7 +261,7 @@ class Box(BubbleModel):
         T0 = self.get_dTb_bulk(z, Ts=Ts)
 
         # Density box, no correlation with bubble box.
-        rho = self.get_box_density(z, vox, Lbox, seed=seed)
+        rho = self.get_box_density(z, vox, Lbox, seed=seed_rho)
 
         # Brightness temperature box
         dTb = T0 * xHI * (1. + rho)
@@ -287,8 +326,6 @@ class Box(BubbleModel):
 
         if box_disk is not None:
             return box_disk
-
-        #assert vox == 1, "There's a bug for vox != 1 right now :("
 
         Npix = int(Lbox / vox)
         Vpix = vox**3
@@ -363,7 +400,35 @@ class Box(BubbleModel):
 
     def get_box_rand(self, box=None, Lbox=100., vox=1., Q=0.5, Qtol=1e-2,
         seed=None, **_kw_):
+        """
+        Generate a box with mean ionized fraction `Q` but no bubbles, i.e.,
+        assume reionization is random spatially.
 
+        Parameters
+        ----------
+        box : np.ndarray, None
+            If supplied, assumes it is another box with the dimensions we want
+            for our random ionization box.
+        Lbox : int, float
+            Length of box in cMpc / h.
+        vox : int, float
+            Size of each voxel (linear dimension) in cMpc / h.
+        Q : int, float
+            Mean ionized fraction.
+        Qtol : int, float
+            Require that we achieve our requested ionized fraction within this
+            (relative) tolerance.
+        seed : integer, None
+            For reproducibility, can supply random seed to make sure the
+            same bubble field is generated for, e.g., two boxes of different
+            resolution.
+
+        Returns
+        -------
+        A 3-D numpy array of ones and zeros, representing a random ionization
+        field.
+
+        """
         if box is None:
             Npix = int(Lbox / vox)
             box = np.zeros([Npix]*3)

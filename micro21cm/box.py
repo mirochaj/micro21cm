@@ -246,6 +246,8 @@ class Box(BubbleModel):
 
         """
 
+        assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `box`!"
+
         box_disk = self.load_box(path=path, Q=Q, z=z, which_box='21cm',
             allow_partial_ionization=allow_partial_ionization,
             seed=seed, Lbox=Lbox, vox=vox, sigma=sigma, R=R)
@@ -310,6 +312,8 @@ class Box(BubbleModel):
         [Lbox / vox]*3.
 
         """
+
+        assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `box`!"
 
         args = (z, Lbox, vox, Q, R, sigma, gamma,
             allow_partial_ionization, seed)
@@ -429,6 +433,9 @@ class Box(BubbleModel):
         field.
 
         """
+
+        assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `box`!"
+        
         if box is None:
             Npix = int(Lbox / vox)
             box = np.zeros([Npix]*3)

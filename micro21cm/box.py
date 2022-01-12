@@ -288,7 +288,7 @@ class Box(BubbleModel):
         if box_disk is not None:
             return box_disk
 
-        assert vox == 1, "There's a bug for vox != 1 right now :("
+        #assert vox == 1, "There's a bug for vox != 1 right now :("
 
         Npix = int(Lbox / vox)
         Vpix = vox**3
@@ -309,9 +309,9 @@ class Box(BubbleModel):
         n = np.random.rand(num)
         R_r = np.exp(np.interp(np.log(n), np.log(cdf), np.log(self.tab_R)))
 
-        # Randomly generate (x, y, z) positions for all bubbles
+        # Randomly generate (x, y, z) positions for all bubbles in cMpc units.
         p_len = np.random.rand(num*3).reshape(num, 3) * Lbox
-        # Get bubble positions in terms of array indices
+        # Get bubble positions in terms of array indices ('bin' = 'bin number')
         p_bin = np.digitize(p_len, bins) - 1
 
         # Initialize a box. We'll zero-out elements lying within bubbles below.
@@ -325,9 +325,12 @@ class Box(BubbleModel):
         # Loop over bubbles and flag all cells within them
         for h in range(p_bin.shape[0]):
 
+            # Position of h'th bubble center in units of bin number, converted
+            # to cMpc.
+            p = p_bin[h] * vox
+
             ##
             # Speed-up with kdtree
-            p = p_bin[h]
 
             # `nearby` are indices in `pos`, i.e., not (i, j, k) indices
             d, nearby = kdtree.query(p, k=1e4, distance_upper_bound=R_r[h] * 1.5)

@@ -414,6 +414,32 @@ class FitHelper(object):
 
         return prefix
 
+    def get_prefix_fitrange(self):
+        prefix = ''
+        kwargs = self.kwargs
+
+        if kwargs['fit_z'] is None:
+            prefix += '_zall'
+            if kwargs['Qprior'] or kwargs['Rprior']:
+                prefix += '_' + s_prior
+        elif type(kwargs['fit_z']) in [list, tuple, np.ndarray]:
+            s = ''
+            for iz in kwargs['fit_z']:
+                s += str(int(iz))
+
+            prefix += '_z{}'.format(s)
+            if s_prior.strip():
+                prefix += '_' + s_prior
+        else:
+            prefix += '_z{}'.format(kwargs['fit_z'])
+
+        if kwargs['kmax'] is not None:
+            prefix += '_kmax_{:.1f}'.format(kwargs['kmax'])
+        if kwargs['kthin'] is not None:
+            prefix += '_kthin_{:.0f}'.format(kwargs['kthin'])
+
+        return prefix
+        
     @property
     def prefix(self):
         if not hasattr(self, '_prefix'):
@@ -427,26 +453,8 @@ class FitHelper(object):
 
             prefix += self.get_prefix_pars()
             prefix += self.get_prefix_priors()
+            prefix += self.get_prefix_fitrange()
 
-            if kwargs['fit_z'] is None:
-                prefix += '_zall'
-                if kwargs['Qprior'] or kwargs['Rprior']:
-                    prefix += '_' + s_prior
-            elif type(kwargs['fit_z']) in [list, tuple, np.ndarray]:
-                s = ''
-                for iz in kwargs['fit_z']:
-                    s += str(int(iz))
-
-                prefix += '_z{}'.format(s)
-                if s_prior.strip():
-                    prefix += '_' + s_prior
-            else:
-                prefix += '_z{}'.format(kwargs['fit_z'])
-
-            if kwargs['kmax'] is not None:
-                prefix += '_kmax_{:.1f}'.format(kwargs['kmax'])
-            if kwargs['kthin'] is not None:
-                prefix += '_kthin_{:.0f}'.format(kwargs['kthin'])
 
             if kwargs['suffix'] is not None:
                 prefix += '_{}'.format(kwargs['suffix'])

@@ -370,6 +370,78 @@ class FitHelper(object):
                 for i in self.fit_zindex])
         return self._fit_z
 
+    def get_prefix_pars(self):
+        prefix = ''
+        kwargs = self.kwargs
+
+        if kwargs['Q_func'] is not None:
+            prefix += '_Q{}'.format(kwargs['Q_func'])
+
+        if kwargs['R_func'] is not None:
+            prefix += '_R{}'.format(kwargs['R_func'])
+
+        if kwargs['Ts_func'] is not None:
+            prefix += '_T{}'.format(kwargs['Ts_func'])
+
+        if kwargs['sigma_func'] is not None:
+            prefix += '_s{}'.format(kwargs['sigma_func'])
+        elif (kwargs['sigma_const'] is not None) and \
+            (kwargs['bubbles_pdf'][0:4] == 'logn'):
+            prefix += '_sconst'
+
+        if (kwargs['gamma_func'] is not None):
+            prefix += '_g{}'.format(kwargs['gamma_func'])
+
+        elif (kwargs['gamma_const'] is not None) and \
+            (kwargs['bubbles_pdf'][0:4] == 'plex'):
+            prefix += '_gconst'
+
+        if (kwargs['Asys_func'] is not None):
+            prefix += '_A{}'.format(kwargs['Asys_func'])
+
+        return prefix
+
+    def get_prefix_priors(self):
+        prefix = ''
+        kwargs = self.kwargs
+
+        if kwargs['prior_tau']:
+            prefix += '_ptau'
+
+        if type(kwargs['prior_GP']) in [list, tuple, np.ndarray]:
+            zp, Qp = kwargs['prior_GP']
+            prefix += '_pGP_z{:.1f}_Q{:.2f}'.format(zp, Qp)
+
+        return prefix
+
+    def get_prefix_fitrange(self):
+        prefix = ''
+        kwargs = self.kwargs
+
+        s_prior = ''
+
+        if kwargs['fit_z'] is None:
+            prefix += '_zall'
+            if kwargs['Qprior'] or kwargs['Rprior']:
+                prefix += '_' + s_prior
+        elif type(kwargs['fit_z']) in [list, tuple, np.ndarray]:
+            s = ''
+            for iz in kwargs['fit_z']:
+                s += str(int(iz))
+
+            prefix += '_z{}'.format(s)
+            if s_prior.strip():
+                prefix += '_' + s_prior
+        else:
+            prefix += '_z{}'.format(kwargs['fit_z'])
+
+        if kwargs['kmax'] is not None:
+            prefix += '_kmax_{:.1f}'.format(kwargs['kmax'])
+        if kwargs['kthin'] is not None:
+            prefix += '_kthin_{:.0f}'.format(kwargs['kthin'])
+
+        return prefix
+
     @property
     def prefix(self):
         if not hasattr(self, '_prefix'):
@@ -379,59 +451,10 @@ class FitHelper(object):
             else:
                 prefix = 'bhot_{}'.format(kwargs['bubbles_pdf'][0:4])
 
-            s_prior = ''
+            prefix += self.get_prefix_pars()
+            prefix += self.get_prefix_priors()
+            prefix += self.get_prefix_fitrange()
 
-            if kwargs['Q_func'] is not None:
-                prefix += '_Q{}'.format(kwargs['Q_func'])
-
-            if kwargs['R_func'] is not None:
-                prefix += '_R{}'.format(kwargs['R_func'])
-
-            if kwargs['Ts_func'] is not None:
-                prefix += '_T{}'.format(kwargs['Ts_func'])
-
-            if kwargs['sigma_func'] is not None:
-                prefix += '_s{}'.format(kwargs['sigma_func'])
-            elif (kwargs['sigma_const'] is not None) and \
-                (kwargs['bubbles_pdf'][0:4] == 'logn'):
-                prefix += '_sconst'
-
-            if (kwargs['gamma_func'] is not None):
-                prefix += '_g{}'.format(kwargs['gamma_func'])
-
-            elif (kwargs['gamma_const'] is not None) and \
-                (kwargs['bubbles_pdf'][0:4] == 'plex'):
-                prefix += '_gconst'
-
-            if (kwargs['Asys_func'] is not None):
-                prefix += '_A{}'.format(kwargs['Asys_func'])
-
-            if kwargs['prior_tau']:
-                prefix += '_ptau'
-
-            if type(kwargs['prior_GP']) in [list, tuple, np.ndarray]:
-                zp, Qp = kwargs['prior_GP']
-                prefix += '_pGP_z{:.1f}_Q{:.2f}'.format(zp, Qp)
-
-            if kwargs['fit_z'] is None:
-                prefix += '_zall'
-                if kwargs['Qprior'] or kwargs['Rprior']:
-                    prefix += '_' + s_prior
-            elif type(kwargs['fit_z']) in [list, tuple, np.ndarray]:
-                s = ''
-                for iz in kwargs['fit_z']:
-                    s += str(int(iz))
-
-                prefix += '_z{}'.format(s)
-                if s_prior.strip():
-                    prefix += '_' + s_prior
-            else:
-                prefix += '_z{}'.format(kwargs['fit_z'])
-
-            if kwargs['kmax'] is not None:
-                prefix += '_kmax_{:.1f}'.format(kwargs['kmax'])
-            if kwargs['kthin'] is not None:
-                prefix += '_kthin_{:.0f}'.format(kwargs['kthin'])
 
             if kwargs['suffix'] is not None:
                 prefix += '_{}'.format(kwargs['suffix'])

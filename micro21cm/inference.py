@@ -418,6 +418,8 @@ class FitHelper(object):
         prefix = ''
         kwargs = self.kwargs
 
+        s_prior = ''
+
         if kwargs['fit_z'] is None:
             prefix += '_zall'
             if kwargs['Qprior'] or kwargs['Rprior']:
@@ -439,7 +441,7 @@ class FitHelper(object):
             prefix += '_kthin_{:.0f}'.format(kwargs['kthin'])
 
         return prefix
-        
+
     @property
     def prefix(self):
         if not hasattr(self, '_prefix'):
@@ -448,8 +450,6 @@ class FitHelper(object):
                 prefix = 'bion_{}'.format(kwargs['bubbles_pdf'][0:4])
             else:
                 prefix = 'bhot_{}'.format(kwargs['bubbles_pdf'][0:4])
-
-            s_prior = ''
 
             prefix += self.get_prefix_pars()
             prefix += self.get_prefix_priors()

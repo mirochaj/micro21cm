@@ -57,7 +57,7 @@ class BubbleModel(object):
         include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
-        effective_grid=None,
+        effective_grid=None, normalize_via_bmf=True,
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
         use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
@@ -102,10 +102,13 @@ class BubbleModel(object):
             When determining the mean bubble density, we smooth the density
             field on a scale R, determined by the value of use_volume_match.
             Basically, we're smoothing on some indicator of the typical bubble
-            size, e.g., where Vdn/dR peaks, vdn/dlogR, etc. This parameter
+            size, e.g., where Vdn/dR peaks, Vdn/dlogR, etc. This parameter
             sets a minimum smoothing scale since we could end up with a
             smoothing scale smaller than the grid resolution of a semi-numeric
             model we're comparing to.
+        normalize_via_bmf : bool
+            Whether to integrate over bubble mass function (bmf) or
+            bubble size distribution (bsd) when such integrals arise.
         density_pdf : str
             Sets functional form of 1-D PDF of density field. Only options
             are normal and lognormal. Affects computation of cross-terms
@@ -173,6 +176,7 @@ class BubbleModel(object):
         self.include_cross_terms = include_cross_terms
         self.include_rsd = include_rsd
         self.include_mu_gt = include_mu_gt
+        self.normalize_via_bmf = normalize_via_bmf
         self.use_volume_match = use_volume_match
         self.approx_linear = approx_linear
         self.density_pdf = density_pdf
@@ -400,10 +404,10 @@ class BubbleModel(object):
         return self._tab_V
 
     @property
-    def tab_dmdR(self):
+    def tab_dMdR(self):
         if not hasattr(self, '_tab_dmdR'):
-            self._tab_dmdR = 4 * np.pi * self.tab_R*2 * self._rho_m
-        return self._tab_dmdR
+            self._tab_dMdR = 4 * np.pi * self.tab_R*2 * self._rho_m
+        return self._tab_dMdR
 
     def get_bmf(self, Q=0.0, R=5., sigma=1, gamma=0., alpha=0., **_kw_):
         """
@@ -414,7 +418,7 @@ class BubbleModel(object):
         dndR = self.get_bsd(Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
             **_kw_)
 
-        dndm = dndR / self.tab_dmdR
+        dndm = dndR / self.tab_dMdR
 
         return dndm
 
@@ -448,38 +452,35 @@ class BubbleModel(object):
         if cached_bsd is not None:
             return cached_bsd
 
-        # In this case, assumes user input is actually peak in V dn/dlogR,
-        # convert to peak in dn/dR before calling _get_bsd_unnormalized
+        # If user supplied BSD, assume it's normalized already.
         if self.bubbles_pdf == 'user':
-            pass
+            dndR = self._tab_user_bsd
+            return dndR
+        # Otherwise, assumes user-supplied 'R' is peak in V dn/dlogR,
+        # convert to peak in dn/dR before calling _get_bsd_unnormalized
         else:
-            _R = R * 1
+            _R = R * 1 # use for caching
+
             R = self.get_R_from_Rpeak(Q=Q, R=R, sigma=sigma, gamma=gamma)
+            dndR = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha)
 
-        # Should cache bsd too.
-        dndR = self._get_bsd_unnormalized(Q=Q, R=R, sigma=sigma,
-            gamma=gamma, alpha=alpha)
-
-        # _bsd here is dn/dR, will multiple by R to obtain dn/dlnR
-        # before integrating over V(R)
-        #dndlogR = dndm * self.tab_R * V
-
-        dndm = dndR / self.tab_dmdR
-
-        integ = np.trapz(dndm * self.tab_V * self.tab_M,
-            x=np.log(self.tab_M))
-
-        #norm = 1. / integ.max()
-        #integ = np.trapz(integ * norm, x=np.log(self.tab_R)) / norm
+        # Integrate to obtain volume in bubbles.
+        if self.normalize_via_bmf:
+            dndm = dndR / self.tab_dMdR
+            integ = np.trapz(dndm * self.tab_V * self.tab_M,
+                x=np.log(self.tab_M))
+        else:
+            integ = np.trapz(dndR * self.tab_V * self.tab_R,
+                x=np.log(self.tab_R))
 
         corr = -1. * np.log(1. - Q) / integ
 
         # Normalize to provided ionized fraction
-        #bsd = _bsd * corr
-
         bsd = dndR * corr
 
-        self._cache_bsd_[(Q, R, sigma, gamma, alpha)] = bsd
+        # Cache, importantly, using _R (input from user), not R, which is
+        self._cache_bsd_[(Q, _R, sigma, gamma, alpha)] = bsd
 
         return bsd
 
@@ -654,20 +655,26 @@ class BubbleModel(object):
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
-        bmf = self.get_bmf(Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha)
         V_o = self.get_overlap_vol_arr(d)
 
+        if self.normalize_via_bmf:
+            bmf = self.get_bmf(Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha)
+
         if exclusion:
-            #integ = np.trapz(bsd * (self.tab_V - V_o) * self.tab_R,
-            #    x=np.log(self.tab_R))
-            integ = np.trapz(bmf * (self.tab_V - V_o) * self.tab_M,
-                x=np.log(self.tab_M))
+            if self.normalize_via_bmf:
+                integ = np.trapz(bmf * (self.tab_V - V_o) * self.tab_M,
+                    x=np.log(self.tab_M))
+            else:
+                integ = np.trapz(bsd * (self.tab_V - V_o) * self.tab_R,
+                    x=np.log(self.tab_R))
         else:
-            #integ = np.trapz(bsd * V_o * self.tab_R,
-            #    x=np.log(self.tab_R))
-            integ = np.trapz(bmf * V_o * self.tab_M,
-                x=np.log(self.tab_M))
+            if self.normalize_via_bmf:
+                integ = np.trapz(bmf * V_o * self.tab_M,
+                    x=np.log(self.tab_M))
+            else:
+                integ = np.trapz(bsd * V_o * self.tab_R,
+                    x=np.log(self.tab_R))
 
 
         if self.bubbles_model == 'fzh04':
@@ -683,19 +690,20 @@ class BubbleModel(object):
 
         bsd = self.get_bsd(Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
-        bmf = self.get_bmf(Q, R=R, sigma=sigma, gamma=gamma,
-            alpha=alpha)
         V_o = self.get_overlap_vol_arr(d)
 
-        #integ1 = np.trapz(bsd * (self.tab_V - V_o) * self.tab_R,
-        #    x=np.log(self.tab_R))
-        #integ2 = np.trapz(bsd * (self.tab_V - V_o) * (1. + xi_bb) *
-        #    self.tab_R, x=np.log(self.tab_R))
-
-        integ1 = np.trapz(bmf * (self.tab_V - V_o) * self.tab_M,
-            x=np.log(self.tab_M))
-        integ2 = np.trapz(bmf * (self.tab_V - V_o) * (1. + xi_bb) *
-            self.tab_M, x=np.log(self.tab_M))
+        if self.normalize_via_bmf:
+            bmf = self.get_bmf(Q, R=R, sigma=sigma, gamma=gamma,
+                alpha=alpha)
+            integ1 = np.trapz(bmf * (self.tab_V - V_o) * self.tab_M,
+                x=np.log(self.tab_M))
+            integ2 = np.trapz(bmf * (self.tab_V - V_o) * (1. + xi_bb) *
+                self.tab_M, x=np.log(self.tab_M))
+        else:
+            integ1 = np.trapz(bsd * (self.tab_V - V_o) * self.tab_R,
+                x=np.log(self.tab_R))
+            integ2 = np.trapz(bsd * (self.tab_V - V_o) * (1. + xi_bb) *
+                self.tab_R, x=np.log(self.tab_R))
 
         if self.bubbles_model == 'fzh04':
             P2 = (1. - np.exp(-integ1)) * (1. - np.exp(-integ2))

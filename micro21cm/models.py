@@ -1778,14 +1778,14 @@ class BubbleModel(object):
             pmap = ['Ts']
         else:
             raise NotImplemented('help')
-            if fitting_Ts:
-                ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],
-                    R=R, sigma=sigma, gamma=gamma, Asys=Asys)
-            else:
-                ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
-                    R=10**pars[0], Asys=Asys,
-                    sigma=sigma if sigma is not None else pars[1],
-                    gamma=gamma if gamma is not None else pars[1])
+            #if fitting_Ts:
+            #    ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],
+            #        R=R, sigma=sigma, gamma=gamma, Asys=Asys)
+            #else:
+            #    ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
+            #        R=10**pars[0], Asys=Asys,
+            #        sigma=sigma if sigma is not None else pars[1],
+            #        gamma=gamma if gamma is not None else pars[1])
 
         print("Fitting for the following parameters: {}".format(pmap))
 

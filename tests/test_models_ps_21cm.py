@@ -36,7 +36,7 @@ def test():
 
     # Check ability to calibrate to known PS
     kw = model.calibrate_ps(k, k**3 * ps / 2. / np.pi**2, Q=0.2, z=z,
-        which_ps='21cm', R=3., sigma=1., xtol=1e-2)
+        which_ps='21cm', R=3., sigma=1., xtol=1e-2, free_Ts=True)
 
     assert abs(kw['Ts'] - Ts) < 1e-1, kw['Ts']
 

@@ -15,13 +15,13 @@ import numpy as np
 
 kw = {'R': 5., 'sigma': 1., 'Q': 0.5}
 
-def test():
+def test(z=8):
 
     model = micro21cm.BubbleModel()
 
-    P1 = [model.get_P1(RR, **kw) for RR in model.tab_R]
-    P2 = [model.get_P2(RR, **kw) for RR in model.tab_R]
-    P_bn = [model.get_Pbn(RR, **kw) for RR in model.tab_R]
+    P1 = [model.get_P1(z, RR, **kw) for RR in model.tab_R]
+    P2 = [model.get_P2(z, RR, **kw) for RR in model.tab_R]
+    P_bn = [model.get_Pbn(z, RR, **kw) for RR in model.tab_R]
 
     # Test limiting behaviour. Should this work better?
     assert np.allclose(kw['Q'], P1[0]+P2[0], rtol=0, atol=1e-3)

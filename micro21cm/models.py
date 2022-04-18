@@ -1663,9 +1663,10 @@ class BubbleModel(object):
     def get_rsd_int_mu2(self, mu):
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
-    def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None, which_ps='bb',
+    def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None,
+        which_ps='bb', maxiter=100, xtol=1e-2, ftol=1e-4,
         free_Asys=False, free_Ts=False, free_sigma=False, free_R=False,
-        free_gamma=False, maxiter=100, xtol=1e-2, ftol=1e-4, use_log=True,
+        free_gamma=False, use_log=True,
         R=None, sigma=None, gamma=None, Asys=1, Ts_guess=None):
         """
         Find the best-fit micro21cm representation of an input
@@ -1674,10 +1675,11 @@ class BubbleModel(object):
         .. note :: Useful for taking a log-normal BSD PS (ionization
             or 21-cm) and calibrating a different BSD's parameters.
 
-        .. note :: Just minimizing the sum of squared difference between the
-            input spectrum and our model.
+        .. note :: Just minimizing the sum of squared difference
+            between the input spectrum and our model.
 
-        .. note :: For maxiter=100, this will take about ~1 minute in general.
+        .. note :: For maxiter=100, this will take about ~1 minute in
+            general.
 
         Parameters
         ----------
@@ -1777,7 +1779,7 @@ class BubbleModel(object):
                 guess = [np.log10(Ts_guess)]
             pmap = ['Ts']
         else:
-            raise NotImplemented('help')
+            raise NotImplemented('Did you specificy any of the free_* parameters?')
             #if fitting_Ts:
             #    ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],
             #        R=R, sigma=sigma, gamma=gamma, Asys=Asys)

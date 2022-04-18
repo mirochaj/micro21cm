@@ -58,12 +58,27 @@ class AnalyzeFit(object): # pragma: no cover
             self._model = BubbleModel(**self.data['kwargs'])
         return self._model
 
+    @property
+    def custom_labels(self):
+        if not hasattr(self, '_custom_labels'):
+            self._custom_labels = {}
+
+        return self._custom_labels
+
+    @custom_labels.setter
+    def custom_labels(self, value):
+        if not hasattr(self, '_custom_labels'):
+            self._custom_labels = {}
+        self._custom_labels.update(value)
+
     def get_labels(self, pars, redshifts=None):
 
         labels = []
 
         for i, par in enumerate(pars):
-            if par in _default_labels:
+            if par in self.custom_labels:
+                labels.append(self.custom_labels[par])
+            elif par in _default_labels:
                 if redshifts is not None:
                     s = _default_labels[par]
                     j = s.find('$')

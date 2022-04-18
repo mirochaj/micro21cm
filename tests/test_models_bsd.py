@@ -89,8 +89,8 @@ def test():
     assert np.all(ps_bb > ps_bd)
 
     # Make sure we recover the input characteristic bubble size
-    kw = model_logn.calibrate_ps(k, k**3 * ps_bb / 2. / np.pi**2, Q=0.1, z=z,
-        which_ps='bb', xtol=1e-2, sigma=1., free_norm=False)
+    kw = model_logn.calibrate_ps(k, k**3 * ps_bb / 2. / np.pi**2,
+        Q=0.1, z=z, which_ps='bb', xtol=1e-2, sigma=1., free_R=True)
     assert (abs(kw['R'] - 2.) < 1e-1), 'Recovered R={}'.format(kw['R'])
 
     # Check some convenience functions

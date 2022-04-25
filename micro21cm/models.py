@@ -54,7 +54,7 @@ class BubbleModel(object):
     def __init__(self, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_model='fzh04',
         include_adiabatic_fluctuations=True, include_overlap_corr=0,
-        include_cross_terms=1, include_rsd=2, include_mu_gt=-1.,
+        include_cross_terms=1, include_rsd=1, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         effective_grid=None, normalize_via_bmf=False, self_consistent_density=0,
@@ -92,8 +92,8 @@ class BubbleModel(object):
         include_rsd : int, bool
             Include simple treatment of redshift space distortions?
         include_mu_gt : float
-            If include_rsd > 0, this sets the lower-bound of the integral
-            that averages the 3-D power spectrum over \mu.
+            If include_rsd > 0, this sets the lower-bound of the
+            integral that averages the 3-D power spectrum over \mu.
         include_cross_terms : bool, int
             If > 0, will allow terms involving both ionization and density to
             be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2021) for
@@ -582,8 +582,9 @@ class BubbleModel(object):
 
         """
 
-        # Note that 'Rp' here is really the radius where dn/dR peaks, just
-        # keeping notation same to avoid changing name of kwarg `R`.
+        # Note that 'Rp' here is really the radius where dn/dR peaks,
+        # just keeping notation same to avoid changing name of
+        # kwarg `R`.
 
         if self.bubbles_pdf == 'user':
             Rp = None
@@ -599,7 +600,8 @@ class BubbleModel(object):
 
         return Rp
 
-    def get_bsd_cdf(self, z=None, Q=0.0, R=5., sigma=1, gamma=0., alpha=0.):
+    def get_bsd_cdf(self, z=None, Q=0.0, R=5., sigma=1, gamma=0.,
+        alpha=0.):
         """
         Compute the cumulative distribution function for the bubble size dist.
         """
@@ -610,7 +612,8 @@ class BubbleModel(object):
 
         return cdf / cdf[-1]
 
-    def get_nb(self, z=None, Q=0.0, R=5., sigma=1, gamma=0.0, alpha=0.):
+    def get_nb(self, z=None, Q=0.0, R=5., sigma=1, gamma=0.0,
+        alpha=0.):
         """
         Compute the number density of bubbles [(h / Mpc)^3].
         """
@@ -669,8 +672,8 @@ class BubbleModel(object):
 
         return np.minimum(corr, 1.) * suppression
 
-    def get_intersectional_vol(self, z, d, Q=0., R=5., sigma=1, gamma=0.,
-        alpha=0., which_vol='o', **_kw_): # pragma: no cover
+    def get_intersectional_vol(self, z, d, Q=0., R=5., sigma=1,
+        gamma=0., alpha=0., which_vol='o', **_kw_): # pragma: no cover
 
         bsd = self.get_bsd(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -697,7 +700,8 @@ class BubbleModel(object):
         return self.get_intersectional_vol(d, Q=Q, R=R, sigma=sigma,
             gamma=gamma, alpha=alpha, which_vol=which_vol, **_kw_)
 
-    def get_Qtot(self, z=None, Q=0.0, R=5., sigma=1, gamma=0., alpha=0.0): # pragma: no cover
+    def get_Qtot(self, z=None, Q=0.0, R=5., sigma=1, gamma=0.,
+        alpha=0.0): # pragma: no cover
         """
         Compute total volume in bubbles, neglecting overlap, so this may exceed
         unity.
@@ -724,6 +728,9 @@ class BubbleModel(object):
         """
         Compute 1 bubble term.
         """
+
+        if Q == 1:
+            return np.ones_like(self.tab_R)
 
         bsd = self.get_bsd(z=z, Q=Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -760,6 +767,9 @@ class BubbleModel(object):
         """
         Compute 2 bubble term.
         """
+
+        if Q == 1:
+            return np.zeros_like(self.tab_R)
 
         bsd = self.get_bsd(z=z, Q=Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -939,10 +949,10 @@ class BubbleModel(object):
         """
         Comptute <bb'> following FZH04 model.
 
-        .. note :: By default, this is equivalent to the joint probability
-            that two points are ionized, often denoted <xx'>. If considering
-            heated bubbles, it is instead the probability that two points are
-            both heated.
+        .. note :: By default, this is equivalent to the joint
+            probability that two points are ionized, often denoted
+            <xx'>. If considering heated bubbles, it is instead the
+            probability that two points are both heated.
 
         Parameters
         ----------
@@ -971,9 +981,16 @@ class BubbleModel(object):
 
         if Q == 0 or (not self.bubbles):
             if separate:
-                return np.zeros_like(self.tab_R), np.zeros_like(self.tab_R)
+                return np.zeros_like(self.tab_R), \
+                    np.zeros_like(self.tab_R)
             else:
                 return np.zeros_like(self.tab_R)
+        elif Q == 1:
+            if separate:
+                return np.ones_like(self.tab_R), \
+                    np.zeros_like(self.tab_R)
+            else:
+                return np.ones_like(self.tab_R)
 
         pb = ProgressBar(self.tab_R.size, use=self.use_pbar,
             name="<bb'>(z={})".format(z))
@@ -995,10 +1012,10 @@ class BubbleModel(object):
         P22 = np.zeros_like(self.tab_R)
         for i, RR in enumerate(self.tab_R):
             pb.update(i)
-            P1[i] = self.get_P1(z, RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                gamma=gamma)
-            P2[i] = self.get_P2(z, RR, Q=Q, R=R, sigma=sigma, alpha=alpha,
-                gamma=gamma, xi_bb=xi_bb[i])
+            P1[i] = self.get_P1(z, RR, Q=Q, R=R, sigma=sigma,
+                alpha=alpha, gamma=gamma)
+            P2[i] = self.get_P2(z, RR, Q=Q, R=R, sigma=sigma,
+                alpha=alpha, gamma=gamma, xi_bb=xi_bb[i])
 
         pb.finish()
 
@@ -1011,22 +1028,27 @@ class BubbleModel(object):
     def get_bn(self, z, Q=0.0, R=5., sigma=1, gamma=0., alpha=0.,
         **_kw_):
         """
-        Get the <bn'> for all scales in self.tab_R by looping over `get_Pbn`.
+        Get the <bn'> for all scales in self.tab_R by looping over
+        `get_Pbn`.
         """
 
-        Pbn = [self.get_Pbn(z, dd, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            exclusion=1) for dd in self.tab_R]
+        if Q == 1:
+            return np.zeros_like(self.tab_R)
+
+        Pbn = [self.get_Pbn(z, dd, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, exclusion=1) for dd in self.tab_R]
         return np.array(Pbn)
 
-    def get_Pbn(self, z, d, Q=0.0, R=5., sigma=1, gamma=0., alpha=0., **_kw_):
+    def get_Pbn(self, z, d, Q=0.0, R=5., sigma=1, gamma=0., alpha=0.,
+        **_kw_):
         """
         Get the probability that one point is ionized and the other is neutral.
         """
 
-        P1 = self.get_P1(z, d, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            exclusion=0)
-        P1e = self.get_P1(z, d, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha,
-            exclusion=1)
+        P1 = self.get_P1(z, d, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, exclusion=0)
+        P1e = self.get_P1(z, d, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, exclusion=1)
 
         return P1e * (1 - P1e) * (1 - P1)
 
@@ -1341,8 +1363,8 @@ class BubbleModel(object):
         return del_i / norm
 
     def get_cross_terms(self, z, Q=0.0, Ts=np.inf, R=5., sigma=1,
-        gamma=0., alpha=0., beta=1., delta_ion=0., separate=False, Rmin=None,
-        **_kw_):
+        gamma=0., alpha=0., beta=1., delta_ion=0., separate=False,
+        Rmin=None, **_kw_):
         """
         Compute all terms that involve bubble field and density field.
 
@@ -1357,8 +1379,10 @@ class BubbleModel(object):
 
         """
 
-        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
-        bn = self.get_bn(z, Q=Q, R=R, sigma=sigma, gamma=gamma, alpha=alpha)
+        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+        bn = self.get_bn(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
         dd = self.get_dd(z)
         _alpha = self.get_alpha(z, Ts)
         #beta_d, beta_T, beta_mu, beta_mu_T = self.get_betas(z, Ts)
@@ -1378,38 +1402,43 @@ class BubbleModel(object):
         else:
             d_i = d_n = 0.0
 
-        # Currently neglects terms containing b and b' (other than <bb'>)
+        # Currently neglects terms containing b and b'
+        # (other than <bb'>)
         if self.include_cross_terms == 0:
-            bd = bd_1pt = bbd = bdd = bbdd = np.zeros_like(self.tab_R)
+            bd = bd_1pt = bbd = np.zeros_like(self.tab_R)
             bd_1pt = np.zeros_like(self.tab_R)
-            bbd = np.zeros_like(self.tab_R)
+            # Can't actually set these to zero or we'll incorrectly
+            # get fluctuations even at Q==1.
+            bdd = Q * dd
+            bbdd = Q**2 * dd
         elif self.include_cross_terms == 1:
             bd = d_i * bb + d_n * bn
-            bd_1pt = bbd = bdd = bbdd = np.zeros_like(self.tab_R)
+            bd_1pt = d_i * Q
+            bbd = d_i * bb
+            bdd = Q * dd
+            bbdd = bb * dd + bd**2 + bd_1pt**2
         elif self.include_cross_terms == 2:
             bd = d_i * bb + d_n * bn
-            bd_1pt = d_i * Q
-
-            bbd = d_i * bb
-            bdd = d_i * d_i * bb + d_i * d_n * bn
-            bbdd = bb * d_i**2
-        elif self.include_cross_terms == 3:
-            bd = d_i * bb + d_n * bn
-            bd_1pt = bbd = bdd = bbdd = np.zeros_like(self.tab_R)
-            bdd = d_i * d_i * bb + d_i * d_n * bn
+            bd_1pt = np.zeros_like(self.tab_R)
+            bbd = np.zeros_like(self.tab_R)
+            bdd = Q * dd
+            bbdd = bb * dd + bd**2
         else:
-            raise NotImplemented('Only know include_cross_terms=1,2,3!')
+            raise NotImplemented('Only know include_cross_terms=1,2!')
 
-        tot = 2 * _alpha * bd + 2 * _alpha**2 * bbd + 2 * _alpha * bdd \
+        tot = 2 * _alpha * bd + 2 * _alpha**2 * bbd \
+            + 2 * _alpha * bdd \
             + _alpha**2 * bbdd \
             - 2 * _alpha**2 * Q * bd_1pt -_alpha**2 * bd_1pt**2
 
         if separate:
-            return 2 * _alpha * bd, 2 * _alpha**2 * bbd, 2 * _alpha * bdd, \
+            return 2 * _alpha * bd, 2 * _alpha**2 * bbd, \
+                2 * _alpha * bdd, \
                 _alpha**2 * bbdd, \
                 - 2 * _alpha**2 * Q * bd_1pt, -_alpha**2 * bd_1pt**2
         else:
-            return 2 * _alpha * bd + 2 * _alpha**2 * bbd + 2 * _alpha * bdd \
+            return 2 * _alpha * bd + 2 * _alpha**2 * bbd \
+                + 2 * _alpha * bdd \
                 + _alpha**2 * bbdd \
                 - 2 * _alpha**2 * Q * bd_1pt - _alpha**2 * bd_1pt**2
 
@@ -1438,12 +1467,8 @@ class BubbleModel(object):
         beta_p = self.get_beta_phi(z, Ts)
         beta_T = self.get_beta_T(z, Ts)
 
-        if self.include_rsd == 1:
+        if self.include_rsd:
             beta_mu_sq = self.get_rsd_boost_dd(self.include_mu_gt)
-        elif self.include_rsd == 2:
-            beta_mu_sq = self.get_rsd_boost_dd(self.include_mu_gt)
-        elif self.include_rsd == 3:
-            beta_mu_sq = 2.
         else:
             beta_mu_sq = 1.
 
@@ -1476,9 +1501,13 @@ class BubbleModel(object):
         bb = 1 * self.get_bb(z, Q, R=R, sigma=sigma, alpha=alpha,
             gamma=gamma, xi_bb=xi_bb)
         dd = 1 * self.get_dd(z)
+
+        # Determines what kind of bubbles we're dealing with.
         _alpha = self.get_alpha(z, Ts)
 
-        dTb = self.get_dTb_bulk(z, Ts=Ts)
+        # Mean differential brightness temperature in bulk IGM.
+        # NOT the global signal!
+        T0 = self.get_dTb_bulk(z, Ts=Ts)
 
         avg_term = _alpha**2 * Q**2
 
@@ -1489,7 +1518,7 @@ class BubbleModel(object):
         avg_term *= corr
 
         # Include correlations in density and temperature caused by
-        # adiabatic expansion/contraction.
+        # adiabatic expansion/contraction, as well as RSDs.
         beta_phi, beta_mu = self.get_betas(z, Ts)
 
         dd *= (beta_mu + beta_phi)**2
@@ -1497,23 +1526,23 @@ class BubbleModel(object):
         cf_21 = dd + (bb * _alpha**2 - avg_term) * Asys
 
         bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
-            self.get_cross_terms(z, Q=Q, Ts=Ts, R=R, sigma=sigma, gamma=gamma,
-                alpha=alpha, delta_ion=delta_ion, separate=True,
-                Rmin=self.effective_grid)
+            self.get_cross_terms(z, Q=Q, Ts=Ts, R=R, sigma=sigma,
+                gamma=gamma, alpha=alpha, delta_ion=delta_ion,
+                separate=True, Rmin=self.effective_grid)
 
         bd *= (beta_mu + beta_phi) * np.sqrt(Asys)
-        #bbd *= (beta_mu + beta_phi)
-        bdd *= (beta_mu + beta_phi)
-        #bbdd *= (beta_mu + beta_phi)**2
-        #bd_1pt *= (beta_mu + beta_phi)
-        #bbd_1pt *= (beta_mu + beta_phi)
+        bbd *= (beta_mu + beta_phi)
+        bdd *= (beta_mu + beta_phi)**2
+        bbdd *= (beta_mu + beta_phi)**2
+        bd_1pt *= (beta_mu + beta_phi)**2
+        bbd_1pt *= (beta_mu + beta_phi)
 
         cf_21 += bd + bbd + bdd + bbdd + bbd_1pt + bd_1pt
 
-        return dTb**2 * cf_21
+        return T0**2 * cf_21
 
-    def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=1, gamma=None, alpha=0.,
-        xi_bb=None, Asys=1., **_kw_):
+    def get_ps_bb(self, z, k, Q=0.5, R=5., sigma=1, gamma=None,
+        alpha=0., xi_bb=None, Asys=1., **_kw_):
         """
         Returns the power spectrum of the bubble field.
         """
@@ -1530,8 +1559,8 @@ class BubbleModel(object):
 
         return ps / 2. / self.get_alpha(z, Ts)
 
-    def _get_ps_bx(self, z, k, Q=0.5, R=5., sigma=1, gamma=None, alpha=0.,
-        xi_bb=None, which_ps='bb', Asys=1, **_kw_):
+    def _get_ps_bx(self, z, k, Q=0.5, R=5., sigma=1, gamma=None,
+        alpha=0., xi_bb=None, which_ps='bb', Asys=1, **_kw_):
         """
         Returns the cross spectrum of the bubble field and some field `x`.
 
@@ -1624,6 +1653,9 @@ class BubbleModel(object):
             cf_21 = self.get_cf_21cm(z, Q=Q, Ts=Ts, R=R,
                 sigma=sigma, gamma=gamma, alpha=alpha, Asys=Asys, xi_bb=xi_bb,
                 delta_ion=delta_ion)
+
+            if np.all(cf_21 == 0) and (Q == 1):
+                return np.zeros_like(k)
 
             # Causes problems for mcfit
             if self.use_mcfit:

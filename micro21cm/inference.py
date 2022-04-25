@@ -171,7 +171,7 @@ fit_kwargs = \
 
  'bubbles_ion': 'ion',      # or 'hot' or False
  'bubbles_pdf': 'lognormal',
- 'include_rsd': 2,
+ 'include_rsd': 1,
 
  'restart': True,
  'burn': 0,

@@ -105,7 +105,7 @@ _priors_Q_pl = {'p0': (0, 1), 'p1': (-20, 0)}
 _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl,
     'broad': _priors_broad['Q'], 'pl': _priors_Q_pl}
 
-_priors_R_pl = {'p0': (0, 30), 'p1': (0, 5)}
+_priors_R_pl = {'p0': (0, 100), 'p1': (0, 10)}
 _priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
 
 _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}

@@ -96,7 +96,7 @@ class BubbleModel(object):
             integral that averages the 3-D power spectrum over \mu.
         include_cross_terms : bool, int
             If > 0, will allow terms involving both ionization and density to
-            be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2021) for
+            be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2022) for
             details.
         effective_grid : bool
             When determining the mean bubble density, we smooth the density

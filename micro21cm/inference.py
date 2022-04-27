@@ -45,7 +45,7 @@ _priors_broad = \
  'Ts': (1e-2, 1000.),
  'Q': (0, 1),
  'R': (0, 100),
- 'sigma': (0.05, 2),
+ 'sigma': (0.05, 2.5),
  'gamma': (-4, 0),
  'Asys': (0.5, 1.5),
 }
@@ -520,8 +520,8 @@ class FitHelper(object):
     @property
     def func_gamma(self):
         if not hasattr(self, '_func_g'):
-            self._func_s = self.get_func('gamma')
-        return self._func_s
+            self._func_g = self.get_func('gamma')
+        return self._func_g
 
     @property
     def func_A(self):
@@ -633,8 +633,9 @@ class FitHelper(object):
 
             # Parameter not allowed to evolve with redshift.
             if self.kwargs['{}_const'.format(par)] is not None:
-                N += 1
-                continue
+                if self.kwargs['{}_const'.format(par)]:
+                    N += 1
+                    continue
 
             func = self.kwargs['{}_func'.format(par)]
             is_func = func is not None

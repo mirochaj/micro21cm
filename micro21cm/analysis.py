@@ -468,7 +468,7 @@ class AnalyzeFit(object): # pragma: no cover
         if use_cbar and show_cbar:
             cax = fig.add_axes([0.91, 0.11, 0.015, 0.77])
             cb = pl.colorbar(cmap, ax=ax, cax=cax, orientation='vertical')
-            cb.set_label(r'$z$')
+            cb.set_label(r'$z$', fontsize=20)
 
 
         return ax

@@ -26,7 +26,6 @@ karr = np.logspace(-1, 0., 41)
 def test():
 
     model = micro21cm.BubbleModel(**setup_kw)
-    model_3 = micro21cm.BubbleModel(include_cross_terms=3, **setup_kw)
     model_bin = micro21cm.BubbleModel(include_cross_terms=2, **setup_kw)
     model_1 = micro21cm.BubbleModel(include_cross_terms=1, **setup_kw)
     model_ideal = micro21cm.BubbleModel(include_cross_terms=0, **setup_kw)
@@ -37,7 +36,6 @@ def test():
     all_terms = model_bin.get_cross_terms(z, separate=False, **kwargs)
     assert np.allclose(other+bd, all_terms)
 
-    all_terms3 = model_3.get_cross_terms(z, separate=False, **kwargs)
     all_terms2 = model_ideal.get_cross_terms(z, separate=False, **kwargs)
     all_terms1 = model_1.get_cross_terms(z, separate=False, **kwargs)
 

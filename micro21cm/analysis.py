@@ -141,7 +141,7 @@ class AnalyzeFit(object): # pragma: no cover
     def plot_triangle(self, fig=1, axes=None, params=None, redshifts=None,
         complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
         fill=False, nu=[0.95, 0.68], take_log=False, is_log=False,
-        skip=None, smooth=None, skip_params=None, **kwargs):
+        skip=None, smooth=None, skip_params=None, show_1d=True, **kwargs):
         """
 
         """
@@ -180,8 +180,11 @@ class AnalyzeFit(object): # pragma: no cover
 
         # Remember, for gridspec, rows are numbered frop top-down.
         if not has_ax:
-            gs = fig.add_gridspec(Np, Np)
-            axes_by_row = [[] for i in range(Np)]
+            if show_1d:
+                gs = fig.add_gridspec(Np, Np)
+                axes_by_row = [[] for i in range(Np)]
+            else:
+                axes_by_row = [fig.add_subplot(111)]
 
         flatchain = self.data['flatchain']
 
@@ -191,6 +194,9 @@ class AnalyzeFit(object): # pragma: no cover
                 if j > i:
                     continue
 
+                if (not show_1d) and i == j:
+                    continue
+
                 if skip is not None:
                     if i in skip:
                         continue
@@ -198,11 +204,14 @@ class AnalyzeFit(object): # pragma: no cover
                         continue
 
                 # Create axis
-                if not has_ax:
-                    _ax = fig.add_subplot(gs[i,j])
-                    axes_by_row[i].append(_ax)
+                if show_1d:
+                    if not has_ax:
+                        _ax = fig.add_subplot(gs[i,j])
+                        axes_by_row[i].append(_ax)
+                    else:
+                        _ax = axes_by_row[i][j]
                 else:
-                    _ax = axes_by_row[i][j]
+                    _ax = axes_by_row[0]
 
                 if skip_params is not None:
                     if params[i] in skip_params:
@@ -459,7 +468,7 @@ class AnalyzeFit(object): # pragma: no cover
         if use_cbar and show_cbar:
             cax = fig.add_axes([0.91, 0.11, 0.015, 0.77])
             cb = pl.colorbar(cmap, ax=ax, cax=cax, orientation='vertical')
-            cb.set_label(r'$z$')
+            cb.set_label(r'$z$', fontsize=20)
 
 
         return ax

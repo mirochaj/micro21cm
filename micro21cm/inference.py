@@ -44,8 +44,8 @@ _priors_broad = \
 {
  'Ts': (1e-2, 1000.),
  'Q': (0, 1),
- 'R': (0, 100),
- 'sigma': (0.05, 2),
+ 'R': (0.5, 50),
+ 'sigma': (0.25, 2.5),
  'gamma': (-4, 0),
  'Asys': (0.5, 1.5),
 }
@@ -105,7 +105,7 @@ _priors_Q_pl = {'p0': (0, 1), 'p1': (-20, 0)}
 _priors_Q = {'tanh': _priors_Q_tanh, 'bpl': _priors_Q_bpl,
     'broad': _priors_broad['Q'], 'pl': _priors_Q_pl}
 
-_priors_R_pl = {'p0': (0, 30), 'p1': (0, 5)}
+_priors_R_pl = {'p0': (0.5, 50), 'p1': (0, 10)}
 _priors_R = {'pl': _priors_R_pl, 'broad': _priors_broad['R']}
 
 _priors_s_pl = {'p0': (0.0, 1), 'p1': (-2, 2)}
@@ -171,7 +171,7 @@ fit_kwargs = \
 
  'bubbles_ion': 'ion',      # or 'hot' or False
  'bubbles_pdf': 'lognormal',
- 'include_rsd': 2,
+ 'include_rsd': 1,
 
  'restart': True,
  'burn': 0,
@@ -520,8 +520,8 @@ class FitHelper(object):
     @property
     def func_gamma(self):
         if not hasattr(self, '_func_g'):
-            self._func_s = self.get_func('gamma')
-        return self._func_s
+            self._func_g = self.get_func('gamma')
+        return self._func_g
 
     @property
     def func_A(self):
@@ -633,8 +633,9 @@ class FitHelper(object):
 
             # Parameter not allowed to evolve with redshift.
             if self.kwargs['{}_const'.format(par)] is not None:
-                N += 1
-                continue
+                if self.kwargs['{}_const'.format(par)]:
+                    N += 1
+                    continue
 
             func = self.kwargs['{}_func'.format(par)]
             is_func = func is not None

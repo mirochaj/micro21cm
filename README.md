@@ -29,3 +29,5 @@ ps = model.get_ps_21cm(z=8., k=k, Ts=3., Q=0.5, R=3., sigma=1)
 # Plot dimensionless power spectrum
 pl.loglog(k, k**3 * ps / 2. / np.pi**2)
 ```
+
+For more information about this model, see [Mirocha et al. (2022)](https://arxiv.org/abs/2201.07249).

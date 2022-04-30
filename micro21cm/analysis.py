@@ -13,7 +13,7 @@ Description:
 import pickle
 import numpy as np
 from .models import BubbleModel
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, double_power_law, \
     extract_params, power_law_lognorm, erf_Q, power_law_Q, lin_Q
@@ -384,7 +384,10 @@ class AnalyzeFit(object): # pragma: no cover
 
         return axes
 
-    def plot_ps(self, z=None, use_best=True, ax=None, fig=1,
+    def get_ps(self, z=None, ztol=1e-2, burn=0):
+        pass
+
+    def plot_ps(self, z=None, use_best=True, ax=None, fig=1, ztol=1e-2,
         conflevel=0.68, samples=None, show_recovery=True,
         marker_kw={}, use_cbar=True, show_cbar=True, show_data=True, cmap='jet',
         burn=0, **kwargs):
@@ -418,7 +421,7 @@ class AnalyzeFit(object): # pragma: no cover
             _z_ = self.data['zfit'][i]
 
             if z is not None:
-                if z != _z_:
+                if abs(z - _z_) > ztol:
                     continue
 
             if use_cbar:
@@ -445,7 +448,7 @@ class AnalyzeFit(object): # pragma: no cover
             # Use cmap to force match in colors
             for i, _z_ in enumerate(data['zfit']):
                 if z is not None:
-                    if z != _z_:
+                    if abs(z - _z_) > ztol:
                         continue
 
                 ydat, yerr = data['data'][i]

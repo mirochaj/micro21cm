@@ -13,11 +13,10 @@ Description:
 import micro21cm
 import numpy as np
 
-kw = {'R': 5., 'sigma': 1., 'Q': 0.5}
+def test(use_bmf=False, z=8, R=5, sigma=1, Q=0.5):
 
-def test(z=8):
-
-    model = micro21cm.BubbleModel()
+    kw = {'R': R, 'sigma': sigma, 'Q': Q}
+    model = micro21cm.BubbleModel(normalize_via_bmf=use_bmf)
 
     P1 = [model.get_P1(z, RR, **kw) for RR in model.tab_R]
     P2 = [model.get_P2(z, RR, **kw) for RR in model.tab_R]
@@ -29,9 +28,15 @@ def test(z=8):
     assert np.allclose(kw['Q'] * (1. - kw['Q']), P_bn[-1], rtol=0, atol=1e-3)
 
     # Need ionization fluctuations to vanish at Q==1
-    bb = model.get_bb(z, Q=1)
+    # Just setting separate=1 to hit more lines.
+    bb1, bb2 = model.get_bb(z, Q=1, separate=1)
     bn = model.get_bn(z, Q=1)
-    assert np.all(bb == 1)
+    assert np.all(bb1+bb2 == 1)
+    assert np.all(bn == 0)
+
+    bb1, bb2 = model.get_bb(z, Q=0, separate=1)
+    bn = model.get_bn(z, Q=0)
+    assert np.all(bb1+bb2 == 0)
     assert np.all(bn == 0)
 
     # Need cross-term cancellation when Q==1
@@ -48,15 +53,20 @@ def test(z=8):
     # Need 21-cm fluctuations to vanish at Q==1
     karr = np.logspace(-1, 0, 11)
     D_21 = np.inf * np.ones_like(karr)
-    for Q in [0.98, 0.99, 0.999, 1]:
+    for Q in [0.98, 0.99, 1]:
         D_21_new = model.get_ps_21cm(z=z, k=karr, Q=Q) * karr**3 / 2. / np.pi**2
 
         print(Q)
         print(D_21)
         print(D_21_new)
-
-        #assert np.all(D_21_new < D_21)
+        # Something weird happens between 0.99 and 0.999
+        #assert np.all(D_21_new <= D_21)
         D_21 = D_21_new.copy()
 
+    assert np.all(D_21 == 0)
+
 if __name__ == '__main__':
-    test()
+    for bmf in [True, False]:
+        test(use_bmf=bmf)
+        test(use_bmf=bmf, Q=1)
+        test(use_bmf=bmf, Q=0)

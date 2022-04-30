@@ -33,5 +33,7 @@ def test():
 
     assert np.allclose(ps_in, ps)
 
+    assert model.get_Rpeak_from_R(**kw) is None
+
 if __name__ == '__main__':
     test()

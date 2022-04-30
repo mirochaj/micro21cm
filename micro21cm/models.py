@@ -93,7 +93,7 @@ class BubbleModel(object):
             Include simple treatment of redshift space distortions?
         include_mu_gt : float
             If include_rsd > 0, this sets the lower-bound of the
-            integral that averages the 3-D power spectrum over \mu.
+            integral that averages the 3-D power spectrum over mu.
         include_cross_terms : bool, int
             If > 0, will allow terms involving both ionization and density to
             be non-zero. See Section 2.4 in Mirocha, Munoz et al. (2022) for
@@ -455,16 +455,6 @@ class BubbleModel(object):
         integ = np.trapz(dndm * self.tab_V * tab_M, x=np.log(tab_M))
         corr = -1. * np.log(1. - Q) / integ
 
-        if not hasattr(self, '_first_time'):
-            print('In BMF', self.normalize_via_bmf, Q,
-                1.-np.exp(-np.trapz(dndR * self.tab_V * self.tab_R,
-                    x=np.log(self.tab_R))),
-                1.-np.exp(-np.trapz(dndm * corr * self.tab_V * tab_M,
-                    x=np.log(tab_M))))
-
-        if not hasattr(self, '_first_time'):
-            self._first_time = 1
-
         # Normalize to provided ionized fraction
         return dndm * corr
 
@@ -477,7 +467,8 @@ class BubbleModel(object):
 
         This is normalized so that:
 
-        1 - \exp{-\int (dn/dlnR) V(R) dlnR} = Q
+        .. math::
+            1 - exp{-\int (dn/dlnR) V(R) dlnR} = Q
 
         Parameters
         ----------
@@ -512,6 +503,7 @@ class BubbleModel(object):
 
         # Integrate to obtain volume in bubbles.
         if self.normalize_via_bmf:
+            print('HELLO')
             tab_dMdR = self.get_dMdR(z, Q=Q, R=_R, sigma=sigma, gamma=gamma,
                 alpha=alpha)
             dndm = dndR / tab_dMdR
@@ -533,7 +525,7 @@ class BubbleModel(object):
             # Normalize to provided ionized fraction
             bsd = dndR * corr
 
-        # Cache, importantly, using _R (input from user), not R, which is
+        # Cache, importantly, using _R (input from user), not R.
         self._cache_bsd_[(z, Q, _R, sigma, gamma, alpha)] = bsd
 
         return bsd
@@ -730,7 +722,7 @@ class BubbleModel(object):
         """
 
         if Q == 1:
-            return np.ones_like(self.tab_R)
+            return np.ones_like(d)
 
         bsd = self.get_bsd(z=z, Q=Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -769,7 +761,7 @@ class BubbleModel(object):
         """
 
         if Q == 1:
-            return np.zeros_like(self.tab_R)
+            return np.zeros_like(d)
 
         bsd = self.get_bsd(z=z, Q=Q, R=R, sigma=sigma, gamma=gamma,
             alpha=alpha)
@@ -978,19 +970,6 @@ class BubbleModel(object):
             of terms.
 
         """
-
-        if Q == 0 or (not self.bubbles):
-            if separate:
-                return np.zeros_like(self.tab_R), \
-                    np.zeros_like(self.tab_R)
-            else:
-                return np.zeros_like(self.tab_R)
-        elif Q == 1:
-            if separate:
-                return np.ones_like(self.tab_R), \
-                    np.zeros_like(self.tab_R)
-            else:
-                return np.ones_like(self.tab_R)
 
         pb = ProgressBar(self.tab_R.size, use=self.use_pbar,
             name="<bb'>(z={})".format(z))
@@ -1686,20 +1665,20 @@ class BubbleModel(object):
         # Full correction weighted by 1/(1 - mu)
         return mod / (1. - mu)
 
-    def get_rsd_boost_d(self, mu):
+    def get_rsd_boost_d(self, mu): # pragma: no cover
         # This is just \int_{\mu_{\min}}^1 d\mu (1 + \mu^2)
         mod = (1. - mu) + 1. * (1. - mu**3) / 3.
         # Full correction weighted by 1/(1 - mu)
         return mod / (1. - mu)
 
-    def get_rsd_int_mu2(self, mu):
+    def get_rsd_int_mu2(self, mu): # pragma: no cover
         return (1. - self.include_mu_gt**3) / 3. / (1. - self.include_mu_gt)
 
     def calibrate_ps(self, k_in, Dsq_in, Q, z=None, Ts=None,
         which_ps='bb', maxiter=100, xtol=1e-2, ftol=1e-4,
         free_Asys=False, free_Ts=False, free_sigma=False, free_R=False,
         free_gamma=False, use_log=True,
-        R=None, sigma=None, gamma=None, Asys=1, Ts_guess=None):
+        R=None, sigma=None, gamma=None, Asys=1, Ts_guess=None): # pragma: no cover
         """
         Find the best-fit micro21cm representation of an input
         power spectrum (presumably from 21cmFAST).

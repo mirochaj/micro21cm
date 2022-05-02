@@ -1108,16 +1108,19 @@ class BubbleModel(object):
                 Parr = Pofk(self.tab_k)
                 _R_, _var_ = TophatVar(self.tab_k, lowring=True)(Parr,
                     extrap=True)
+
                 var_f = interp1d(_R_, _var_, kind='cubic')
 
                 if r < _R_.min():
                     r = _R_.min()
                     print("Smoothing scale below tabulated R range!")
                     print("Will set to minumum: r={:.2e}".format(r))
+                    print("[z={},r={}]".format(z, r))
                 elif r > _R_.max():
                     r = _R_.max()
                     print("Smoothing scale above tabulated R range!")
                     print("Will set to maximum: r={:.2e}".format(r))
+                    print("[z={},r={}]".format(z, r))
 
                 var = var_f(r)
             else:

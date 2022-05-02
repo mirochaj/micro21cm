@@ -163,9 +163,9 @@ fit_kwargs = \
 
  'Ts_log10': True,
 
- 'kmin': 0.1,
- 'kmax': 1,
- 'kthin': None,
+ 'data_kmin': 0.1,
+ 'data_kmax': 1,
+ 'data_kthin': None,
  'invert_logL': False,
  'upper_limits': False,
 
@@ -308,14 +308,14 @@ class FitHelper(object):
     def tab_k(self):
         if not hasattr(self, '_kblobs'):
             kblobs = self.data['power'][0]['k']
-            kmin = self.kwargs['kmin']
-            kmax = self.kwargs['kmax']
+            kmin = self.kwargs['data_kmin']
+            kmax = self.kwargs['data_kmax']
 
             k_ok = np.logical_and(kblobs >= kmin, kblobs <= kmax)
             kblobs = kblobs[k_ok==1]
 
-            if self.kwargs['kthin'] is not None:
-                kblobs = kblobs[::int(self.kwargs['kthin'])]
+            if self.kwargs['data_kthin'] is not None:
+                kblobs = kblobs[::int(self.kwargs['data_kthin'])]
 
             self._kblobs = kblobs
             mask = np.ones(self.data['power'][0]['k'].size, dtype=int)
@@ -435,10 +435,10 @@ class FitHelper(object):
         else:
             prefix += '_z{}'.format(kwargs['fit_z'])
 
-        if kwargs['kmax'] is not None:
-            prefix += '_kmax_{:.1f}'.format(kwargs['kmax'])
-        if kwargs['kthin'] is not None:
-            prefix += '_kthin_{:.0f}'.format(kwargs['kthin'])
+        if kwargs['data_kmax'] is not None:
+            prefix += '_kmax_{:.1f}'.format(kwargs['data_kmax'])
+        if kwargs['data_kthin'] is not None:
+            prefix += '_kthin_{:.0f}'.format(kwargs['data_kthin'])
 
         return prefix
 

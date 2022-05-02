@@ -487,7 +487,7 @@ class AnalyzeFit(object): # pragma: no cover
             _hi = 100 - _lo
             lo, hi = np.nanpercentile(ps, (_lo, _hi), axis=0)
             ax.fill_between(self.data['kblobs'], lo, hi, **kwargs)
-            
+
         ##
         # Overplot data
         if ('data' in self.data.keys()) and show_data:
@@ -506,7 +506,7 @@ class AnalyzeFit(object): # pragma: no cover
         ax.set_yscale('log')
 
         try:
-            ax.set_ylim(data['blobs'].min()*0.5, data['blobs'].max() * 2)
+            ax.set_ylim(self.data['blobs'].min()*0.5, self.data['blobs'].max() * 2)
         except:
             ax.set_ylim(1, 1e4)
 

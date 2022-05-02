@@ -169,10 +169,12 @@ fit_kwargs = \
  'invert_logL': False,
  'upper_limits': False,
 
+ # Only parameters that BubbleModel constructor understands
  'bubbles_ion': 'ion',      # or 'hot' or False
  'bubbles_pdf': 'lognormal',
  'include_rsd': 1,
  'include_mu_gt': -1,
+ ###########################################################
 
  'restart': True,
  'burn': 0,

@@ -217,8 +217,11 @@ def get_cmd_line_kwargs(argv):
             vals = post[1:-1].split(',')
             cmd_line_kwargs[pre] = np.array([float(val) for val in vals])
         else:
-            print("Don't understand format for cmd-line arg '{}'!".format(arg))
-            print("Moving on...")
+            try:
+                cmd_line_kwargs[pre] = float(post)
+            except ValueError:
+                # strings with underscores will return False from isalpha
+                cmd_line_kwargs[pre] = str(post)
 
     return cmd_line_kwargs
 

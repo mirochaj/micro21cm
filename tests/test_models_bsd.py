@@ -28,8 +28,6 @@ def test(use_bmf=False):
         normalize_via_bmf=use_bmf)
     model_nob = micro21cm.BubbleModel(bubbles=False)
 
-    print('HEY ASSHOLE', model_logn.normalize_via_bmf)
-
     # Check alpha
     assert model_logn.get_alpha(z, Ts=np.inf) == -1
     assert model_nob.get_alpha(z, Ts=np.inf) == 0

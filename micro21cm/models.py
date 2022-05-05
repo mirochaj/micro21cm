@@ -503,7 +503,6 @@ class BubbleModel(object):
 
         # Integrate to obtain volume in bubbles.
         if self.normalize_via_bmf:
-            print('HELLO')
             tab_dMdR = self.get_dMdR(z, Q=Q, R=_R, sigma=sigma, gamma=gamma,
                 alpha=alpha)
             dndm = dndR / tab_dMdR

@@ -72,7 +72,7 @@ class Box(BubbleModel):
 
     def generate_boxes(self, Q, z=None, which_box='bubbles',
         allow_partial_ionization=0, path='.',
-        seeds=None, Lbox=100., vox=1., clobber=False, **kwargs):
+        seeds=None, Lbox=100., vox=1., clobber=False, **kwargs): # pragma: no cover
         """
         Generate a series of boxes at different Q's so we can save time later
         and just load them from disk.

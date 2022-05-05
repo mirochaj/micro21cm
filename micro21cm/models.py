@@ -1110,16 +1110,13 @@ class BubbleModel(object):
 
                 var_f = interp1d(_R_, _var_, kind='cubic')
 
-                if r < _R_.min():
-                    r = _R_.min()
-                    print("Smoothing scale below tabulated R range!")
-                    print("Will set to minumum: r={:.2e}".format(r))
-                    print("[z={},r={}]".format(z, r))
-                elif r > _R_.max():
-                    r = _R_.max()
-                    print("Smoothing scale above tabulated R range!")
-                    print("Will set to maximum: r={:.2e}".format(r))
-                    print("[z={},r={}]".format(z, r))
+                r_too_lo = (r < _R_.min())
+                r_too_hi = (r > _R_.max())
+                r_in_R = not (r_too_lo or r_too_hi)
+
+                if not r_in_R:
+                    r = _R_.max() if r_too_hi else r_too_lo
+                    print("Smoothing scale outside tabulated range [z={},r={}]".format(z, r))
 
                 var = var_f(r)
             else:

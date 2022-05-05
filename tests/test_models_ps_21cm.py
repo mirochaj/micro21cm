@@ -13,8 +13,8 @@ Description:
 import micro21cm
 import numpy as np
 
-def test():
-    model = micro21cm.BubbleModel()
+def test(use_mcfit=True):
+    model = micro21cm.BubbleModel(use_mcfit=use_mcfit)
     model_nob = micro21cm.BubbleModel(bubbles=False)
 
     # Set modes of interest
@@ -43,4 +43,5 @@ def test():
     #assert abs(kw['Ts'] - Ts) < 1e-1, kw['Ts']
 
 if __name__ == '__main__':
-    test()
+    test(use_mcfit=True)
+    test(use_mcfit=False)

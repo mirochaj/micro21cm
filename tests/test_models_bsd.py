@@ -11,11 +11,13 @@ Description:
 """
 
 import time
+import pytest
 import micro21cm
 import numpy as np
 import matplotlib.pyplot as pl
 
-def test(use_bmf=False):
+@pytest.mark.parametrize('use_bmf,', [(True,), (False,)])
+def test(use_bmf):
 
     z = 8.
     k = np.logspace(-1, 0, 5)
@@ -109,7 +111,3 @@ def test(use_bmf=False):
     rofk = model_logn.get_r_of_k(z, k, Q=0.1, R=2., sigma=1)
 
     assert np.all(rofk > 0)
-
-if __name__ == '__main__':
-    test(False)
-    test(True)

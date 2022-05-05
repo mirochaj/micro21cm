@@ -10,10 +10,12 @@ Description:
 
 """
 
+import pytest
 import micro21cm
 import numpy as np
 
-def test(use_mcfit=True):
+@pytest.mark.parametrize('use_mcfit,', [(True,), (False,)])
+def test(use_mcfit):
     model = micro21cm.BubbleModel(use_mcfit=use_mcfit)
     model_nob = micro21cm.BubbleModel(bubbles=False)
 
@@ -41,7 +43,3 @@ def test(use_mcfit=True):
     #    which_ps='21cm', R=3., sigma=1., xtol=1e-2, free_Ts=True)
 #
     #assert abs(kw['Ts'] - Ts) < 1e-1, kw['Ts']
-
-if __name__ == '__main__':
-    test(use_mcfit=True)
-    test(use_mcfit=False)

@@ -10,6 +10,7 @@ Description:
 
 """
 
+import pytest
 import micro21cm
 import numpy as np
 
@@ -17,8 +18,10 @@ import numpy as np
 z = 8.
 Ts = 3.
 kw = {'Q': 0.1, 'R': 2.5, 'sigma': 1}
+Lbox = 50
 
-def test(Lbox=50, use_h5py=True):
+@pytest.mark.parametrize('use_h5py,', [(True,), (False,)])
+def test(use_h5py):
 
     # Initialize bubble model
     model = micro21cm.Box(use_h5py=use_h5py)
@@ -70,7 +73,3 @@ def test(Lbox=50, use_h5py=True):
         rbox3 = model.get_box_rand(seed=1234, Lbox=5, vox=1, Q=kw['Q'])
     except ValueError:
         assert True
-
-if __name__ == '__main__':
-    test(use_h5py=True)
-    test(use_h5py=False)

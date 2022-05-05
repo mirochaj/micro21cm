@@ -128,6 +128,3 @@ def test():
 
         # Write data
         helper.save_data(fn, sampler, data_pre)
-
-if __name__ == '__main__':
-    test()

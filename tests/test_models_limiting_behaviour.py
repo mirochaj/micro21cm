@@ -10,10 +10,20 @@ Description:
 
 """
 
+import pytest
 import micro21cm
 import numpy as np
 
-def test(use_bmf=False, z=8, R=5, sigma=1, Q=0.5):
+test_options = \
+[(8, 5, 1, 0.5, False),
+ (8, 5, 1, 0.5, True),
+ (8, 5, 1, 0, False),
+ (8, 5, 1, 0, True),
+ (8, 5, 1, 1, False),
+ (8, 5, 1, 1, True)]
+
+@pytest.mark.parametrize('z, R, sigma, Q, use_bmf', test_options)
+def test(z, R, sigma, Q, use_bmf):
 
     kw = {'R': R, 'sigma': sigma, 'Q': Q}
     model = micro21cm.BubbleModel(normalize_via_bmf=use_bmf)
@@ -64,9 +74,3 @@ def test(use_bmf=False, z=8, R=5, sigma=1, Q=0.5):
         D_21 = D_21_new.copy()
 
     assert np.all(D_21 == 0)
-
-if __name__ == '__main__':
-    for bmf in [True, False]:
-        test(use_bmf=bmf)
-        test(use_bmf=bmf, Q=1)
-        test(use_bmf=bmf, Q=0)

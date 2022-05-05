@@ -65,7 +65,8 @@ def test():
         #return model.get_ps_21cm(z, k, **kw) * k**3 / 2. / np.pi**2
         return kw['Ts'] * ((1. + z) / 8.) * (1. - kw['Q'])
 
-    assert helper.nparams == 5, helper.pinfo[0]
+    # Changed default to Asys_val=1 so nparams should be 4
+    assert helper.nparams == 4, helper.pinfo[0]
     assert helper.fit_z.size == 1
     assert helper.tab_k.size == 2
     assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma', 'Asys'], helper.pinfo[0]

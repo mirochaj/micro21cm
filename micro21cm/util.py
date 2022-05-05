@@ -34,8 +34,8 @@ labels = \
  'k': r'$k / [h \ \mathrm{cMpc}^{-1}]$',
  'pofk': r'$P(k)$',
  'cf21': r'$\xi_{21}(R)$',
- 'delta_sq': r'$\overline{\delta T_b}^2 \Delta^2(k) \ [\mathrm{mK}^2]$',
- 'delta_sq_long': r'$\overline{\delta T_b}^2 k^3 \left(\frac{P(k)}{2\pi^2}\right) \ [\mathrm{mK}^2]$',
+ 'delta_sq': r'$\Delta^2(k) \ [\mathrm{mK}^2]$',
+ 'delta_sq_long': r'$k^3 \left(\frac{P(k)}{2\pi^2}\right) \ [\mathrm{mK}^2]$',
  'delta_sq_xx': r'$\Delta_{xx}^2(k)$',
  'delta_sq_xd': r'$k^3 |P_{x\delta}| / 2 \pi^2$',
  'Ts': r'$T_S / \mathrm{K}$',
@@ -217,8 +217,11 @@ def get_cmd_line_kwargs(argv):
             vals = post[1:-1].split(',')
             cmd_line_kwargs[pre] = np.array([float(val) for val in vals])
         else:
-            print("Don't understand format for cmd-line arg '{}'!".format(arg))
-            print("Moving on...")
+            try:
+                cmd_line_kwargs[pre] = float(post)
+            except ValueError:
+                # strings with underscores will return False from isalpha
+                cmd_line_kwargs[pre] = str(post)
 
     return cmd_line_kwargs
 

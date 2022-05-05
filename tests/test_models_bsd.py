@@ -11,18 +11,23 @@ Description:
 """
 
 import time
+import pytest
 import micro21cm
 import numpy as np
 import matplotlib.pyplot as pl
 
-def test():
+@pytest.mark.parametrize('use_bmf,', [(True,), (False,)])
+def test(use_bmf):
 
     z = 8.
     k = np.logspace(-1, 0, 5)
 
-    model_logn = micro21cm.BubbleModel(bubbles_pdf='lognormal')
-    model_n = micro21cm.BubbleModel(bubbles_pdf='normal')
-    model_plex = micro21cm.BubbleModel(bubbles_pdf='plexp')
+    model_logn = micro21cm.BubbleModel(bubbles_pdf='lognormal',
+        normalize_via_bmf=use_bmf)
+    model_n = micro21cm.BubbleModel(bubbles_pdf='normal',
+        normalize_via_bmf=use_bmf)
+    model_plex = micro21cm.BubbleModel(bubbles_pdf='plexp',
+        normalize_via_bmf=use_bmf)
     model_nob = micro21cm.BubbleModel(bubbles=False)
 
     # Check alpha
@@ -42,6 +47,11 @@ def test():
     t3 = time.time()
     bsd_logn2 = model_logn.get_bsd(Q=0.1, R=2., sigma=1)
     t4 = time.time()
+
+    assert (t4 - t3) < (t2 - t1), "Check caching."
+
+    # Check mass function call
+    bmf = model_logn.get_bmf(z, Q=0.1, R=2., sigma=1)
 
     # Gaussian BSD -- don't really use this but check it.
     bsd_n1 = model_n.get_bsd(Q=0.1, R=2., sigma=1)
@@ -89,9 +99,9 @@ def test():
     assert np.all(ps_bb > ps_bd)
 
     # Make sure we recover the input characteristic bubble size
-    kw = model_logn.calibrate_ps(k, k**3 * ps_bb / 2. / np.pi**2,
-        Q=0.1, z=z, which_ps='bb', xtol=1e-2, sigma=1., free_R=True)
-    assert (abs(kw['R'] - 2.) < 1e-1), 'Recovered R={}'.format(kw['R'])
+    #kw = model_logn.calibrate_ps(k, k**3 * ps_bb / 2. / np.pi**2,
+    #    Q=0.1, z=z, which_ps='bb', xtol=1e-2, sigma=1., free_R=True)
+    #assert (abs(kw['R'] - 2.) < 1e-1), 'Recovered R={}'.format(kw['R'])
 
     # Check some convenience functions
     cdf = model_logn.get_bsd_cdf(Q=0.1, R=2., sigma=1)
@@ -101,6 +111,3 @@ def test():
     rofk = model_logn.get_r_of_k(z, k, Q=0.1, R=2., sigma=1)
 
     assert np.all(rofk > 0)
-
-if __name__ == '__main__':
-    test()

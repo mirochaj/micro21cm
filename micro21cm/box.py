@@ -72,7 +72,7 @@ class Box(BubbleModel):
 
     def generate_boxes(self, Q, z=None, which_box='bubbles',
         allow_partial_ionization=0, path='.',
-        seeds=None, Lbox=100., vox=1., clobber=False, **kwargs):
+        seeds=None, Lbox=100., vox=1., clobber=False, **kwargs): # pragma: no cover
         """
         Generate a series of boxes at different Q's so we can save time later
         and just load them from disk.
@@ -190,7 +190,7 @@ class Box(BubbleModel):
         """
 
         box_disk = self.load_box(z=z, Lbox=Lbox, vox=vox, which_box='density',
-            seed=None)
+            seed=seed)
 
         if box_disk is not None:
             return box_disk
@@ -435,7 +435,7 @@ class Box(BubbleModel):
         """
 
         assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `box`!"
-        
+
         if box is None:
             Npix = int(Lbox / vox)
             box = np.zeros([Npix]*3)

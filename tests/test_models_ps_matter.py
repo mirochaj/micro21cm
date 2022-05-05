@@ -52,7 +52,3 @@ def test(rtol=1e-2):
     assert err_mc < rtol, \
         "Not recovering sigma_8 to <={:.1e}% w/ mcfit (err={:.5e}).".format(rtol,
             err_mc)
-
-
-if __name__ == '__main__':
-    test()

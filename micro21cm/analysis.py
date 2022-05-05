@@ -13,7 +13,7 @@ Description:
 import pickle
 import numpy as np
 from .models import BubbleModel
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, double_power_law, \
     extract_params, power_law_lognorm, erf_Q, power_law_Q, lin_Q
@@ -141,7 +141,8 @@ class AnalyzeFit(object): # pragma: no cover
     def plot_triangle(self, fig=1, axes=None, params=None, redshifts=None,
         complement=False, bins=20, burn=0, fig_kwargs={}, contours=True,
         fill=False, nu=[0.95, 0.68], take_log=False, is_log=False,
-        skip=None, smooth=None, skip_params=None, show_1d=True, **kwargs):
+        skip=None, smooth=None, skip_params=None, show_1d=True,
+        logL_cut=-np.inf, **kwargs):
         """
 
         """
@@ -384,10 +385,51 @@ class AnalyzeFit(object): # pragma: no cover
 
         return axes
 
-    def plot_ps(self, z=None, use_best=True, ax=None, fig=1,
+    def get_zindex_in_data(self, z, ztol=1e-3):
+        j = np.argmin(np.abs(z - self.data['zfit']))
+        assert abs(self.data['zfit'][j] - z) < ztol
+
+        return j
+
+    def get_ps(self, z=None, ztol=1e-2, burn=0, reshape=True):
+        burn_per_w = burn // self.data['chain'].shape[0]
+
+        data = self.data
+        sh = data['blobs'].shape
+
+        #if len(sh) == 4:
+        if reshape:
+            _ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2],sh[3]))
+        else:
+            _ps = data['blobs']
+
+        if z is not None:
+            i = self.get_zindex_in_data(z, ztol=ztol)
+
+            if reshape:
+                ps = _ps[:,i]
+            else:
+                ps = _ps[:,:,i]
+
+            return self.data['kblobs'], ps[burn_per_w:]
+        else:
+            return self.data['kblobs'], _ps[burn_per_w:]
+
+    def get_stuck_walkers(self, logL_min=-np.inf, burn=0):
+        nw = self.data['chain'].shape[0]
+        burn_per_w = burn // nw
+
+        bad_L = self.data['lnprob'][:,burn_per_w:] < logL_min
+        bad_w = np.any(bad_L, axis=1)
+
+        bad_i = np.argwhere(bad_w).squeeze()
+
+        return bad_i
+
+    def plot_ps(self, z=None, use_best=True, ax=None, fig=1, ztol=1e-2,
         conflevel=0.68, samples=None, show_recovery=True,
         marker_kw={}, use_cbar=True, show_cbar=True, show_data=True, cmap='jet',
-        burn=0, **kwargs):
+        burn=0, logL_min=-np.inf, logL_max=np.inf, **kwargs):
         """
         Plot the power spectrum, either at the maximum likelihood point or
         as a shaded region indicative of a given confidence level.
@@ -401,59 +443,62 @@ class AnalyzeFit(object): # pragma: no cover
             cmap = ScalarMappable(norm=norm, cmap=cmap)
             cmap.set_array([])
 
-        burn_per_w = burn // self.data['chain'].shape[0]
+        sh = self.data['blobs'].shape
+        nsteps, nw, nz, nk = sh
+        burn_per_w = burn // nw
+        ibest = np.argwhere(self.data['lnprob'] == self.data['lnprob'].max())[0]
 
-        data = self.data
-        ibest = np.argwhere(data['lnprob'] == data['lnprob'].max())[0]
-        sh = data['blobs'].shape
+        i = self.get_zindex_in_data(z=z, ztol=ztol)
+        _z_ = self.data['zfit'][i]
 
-        #if len(sh) == 4:
-        _ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2],sh[3]))
-        #else:
-        #    _ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2]))
+        if (logL_min > -np.inf):
+            bad_i = self.get_stuck_walkers(logL_min, burn=burn)
+            if bad_i.size == nw:
+                raise ValueError("No acceptable walkers!")
+            elif bad_i.size > 0:
+                _k, _ps_ = self.get_ps(z=_z_, ztol=ztol, burn=burn, reshape=False)
 
-        colors = 'k', 'b', 'm', 'c', 'y'
-        for i in range(sh[2]):
-            ps = _ps[:,i]
-            _z_ = self.data['zfit'][i]
+                _ps = []
+                for iw in np.arange(nw):
+                    if iw in bad_i:
+                        continue
 
-            if z is not None:
-                if z != _z_:
-                    continue
+                    _ps.append(_ps_[:,iw,:])
 
-            if use_cbar:
-                kwargs['color'] = cmap.to_rgba(_z_)
-
-            if not show_recovery:
-                continue
-            elif use_best:
-                ax.plot(data['kblobs'], data['blobs'][ibest[1],
-                    ibest[0],i], **kwargs)
-            elif samples is not None:
-                ax.plot(data['kblobs'], ps[-samples:].T, **kwargs)
+                _ps = np.array(_ps)
+                ps = np.reshape(_ps, (_ps.shape[0] * _ps.shape[1], nk))
             else:
-                _lo = (1. - conflevel) * 100 / 2.
-                _hi = 100 - _lo
-                lo, hi = np.percentile(ps[burn:], (_lo, _hi), axis=0)
-                ax.fill_between(data['kblobs'], lo, hi,
-                    **kwargs)
+                _k, ps = self.get_ps(z=_z_, ztol=ztol, burn=burn, reshape=True)
+        else:
+            _k, ps = self.get_ps(z=_z_, ztol=ztol, burn=burn, reshape=True)
+
+        if use_cbar:
+            kwargs['color'] = cmap.to_rgba(_z_)
+
+        if not show_recovery:
+            pass
+        elif use_best:
+            ax.plot(self.data['kblobs'], self.data['blobs'][ibest[1],
+                ibest[0],i], **kwargs)
+        elif samples is not None:
+            ax.plot(self.data['kblobs'], ps[-samples:,:].T, **kwargs)
+        else:
+            _lo = (1. - conflevel) * 100 / 2.
+            _hi = 100 - _lo
+            lo, hi = np.nanpercentile(ps, (_lo, _hi), axis=0)
+            ax.fill_between(self.data['kblobs'], lo, hi, **kwargs)
 
         ##
         # Overplot data
-        if ('data' in data.keys()) and show_data:
+        if ('data' in self.data.keys()) and show_data:
 
             # Use cmap to force match in colors
-            for i, _z_ in enumerate(data['zfit']):
-                if z is not None:
-                    if z != _z_:
-                        continue
+            ydat, yerr = self.data['data'][i]
 
-                ydat, yerr = data['data'][i]
+            if use_cbar:
+                marker_kw['color'] = cmap.to_rgba(_z_)
 
-                if use_cbar:
-                    marker_kw['color'] = cmap.to_rgba(_z_)
-
-                ax.errorbar(data['kblobs'], ydat, yerr.T, **marker_kw)
+            ax.errorbar(self.data['kblobs'], ydat, yerr.T, **marker_kw)
 
         ax.set_xlabel(labels['k'])
         ax.set_ylabel(labels['delta_sq'])
@@ -461,17 +506,17 @@ class AnalyzeFit(object): # pragma: no cover
         ax.set_yscale('log')
 
         try:
-            ax.set_ylim(data['blobs'].min()*0.5, data['blobs'].max() * 2)
+            ax.set_ylim(self.data['blobs'].min()*0.5, self.data['blobs'].max() * 2)
         except:
             ax.set_ylim(1, 1e4)
 
-        if use_cbar and show_cbar:
+        if use_cbar and show_cbar and show_recovery:
             cax = fig.add_axes([0.91, 0.11, 0.015, 0.77])
             cb = pl.colorbar(cmap, ax=ax, cax=cax, orientation='vertical')
             cb.set_label(r'$z$', fontsize=20)
 
 
-        return ax
+        return fig, ax
 
     def get_par_from_increments(self):
         pass

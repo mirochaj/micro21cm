@@ -10,11 +10,13 @@ Description:
 
 """
 
+import pytest
 import micro21cm
 import numpy as np
 
-def test():
-    model = micro21cm.BubbleModel()
+@pytest.mark.parametrize('use_mcfit,', [(True,), (False,)])
+def test(use_mcfit):
+    model = micro21cm.BubbleModel(use_mcfit=use_mcfit)
     model_nob = micro21cm.BubbleModel(bubbles=False)
 
     # Set modes of interest
@@ -34,12 +36,10 @@ def test():
         ps_nob = model_nob.get_ps_21cm(z=z, k=k, Ts=Ts, Q=0.2, R=3., sigma=1)
         assert np.all(ps > ps_nob)
 
+    var21 = model.get_variance_21cm(z, r=10.)
+
     # Check ability to calibrate to known PS
-    kw = model.calibrate_ps(k, k**3 * ps / 2. / np.pi**2, Q=0.2, z=z,
-        which_ps='21cm', R=3., sigma=1., xtol=1e-2, free_Ts=True)
-
-    assert abs(kw['Ts'] - Ts) < 1e-1, kw['Ts']
-
-
-if __name__ == '__main__':
-    test()
+    #kw = model.calibrate_ps(k, k**3 * ps / 2. / np.pi**2, Q=0.2, z=z,
+    #    which_ps='21cm', R=3., sigma=1., xtol=1e-2, free_Ts=True)
+#
+    #assert abs(kw['Ts'] - Ts) < 1e-1, kw['Ts']

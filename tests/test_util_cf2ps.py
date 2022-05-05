@@ -60,7 +60,3 @@ def test(rtol=1e-2):
     assert np.all(err_cc[kok==1] < rtol)
     assert np.all(err_mc[kok==1] < rtol)
     assert np.all(err_mc1[kok==1] < rtol)
-
-
-if __name__ == '__main__':
-    test()

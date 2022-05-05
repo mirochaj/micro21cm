@@ -145,7 +145,7 @@ fit_kwargs = \
  'R_val': None,
  'sigma_val': None,
  'gamma_val': None,
- 'Asys_val': None,
+ 'Asys_val': 1,
 
  'Q_const': None,
  'Ts_const': None,

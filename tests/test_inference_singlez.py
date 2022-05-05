@@ -69,7 +69,7 @@ def test():
     assert helper.nparams == 4, helper.pinfo[0]
     assert helper.fit_z.size == 1
     assert helper.tab_k.size == 2
-    assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma', 'Asys'], helper.pinfo[0]
+    assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma'], helper.pinfo[0]
     assert np.isfinite(helper.get_prior([0.1, 10., 5., 1., 1.]))
     assert np.all(helper.k_mask == 0)
 

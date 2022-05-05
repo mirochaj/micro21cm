@@ -190,7 +190,7 @@ class Box(BubbleModel):
         """
 
         box_disk = self.load_box(z=z, Lbox=Lbox, vox=vox, which_box='density',
-            seed=None)
+            seed=seed)
 
         if box_disk is not None:
             return box_disk
@@ -435,7 +435,7 @@ class Box(BubbleModel):
         """
 
         assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `box`!"
-        
+
         if box is None:
             Npix = int(Lbox / vox)
             box = np.zeros([Npix]*3)

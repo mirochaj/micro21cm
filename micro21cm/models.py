@@ -1771,8 +1771,8 @@ class BubbleModel(object):
         elif (not free_Ts) and free_R and (free_sigma or free_gamma):
             ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
                 Asys=Asys, R=10**pars[0], sigma=pars[1], gamma=pars[1])
-            guess = [-1. + Q * 2]
-            guess.append(1. if self.bubbles_pdf == 'lognormal' else -2.5)
+            guess = [-0.45 + Q * 2.2]
+            guess.append(1. if self.bubbles_pdf == 'lognormal' else -3.5)
             pmap = ['R',
                 'sigma' if self.bubbles_pdf == 'lognormal' else 'gamma']
         elif (not free_Ts) and free_R and not (free_sigma or free_gamma):
@@ -1800,6 +1800,7 @@ class BubbleModel(object):
             #        gamma=gamma if gamma is not None else pars[1])
 
         print("Fitting for the following parameters: {}".format(pmap))
+        print("Initial guesses (Q={}): {}".format(Q, guess))
 
         Dsq = lambda pars: k_in**3 * ps(pars) / 2. / np.pi**2
 

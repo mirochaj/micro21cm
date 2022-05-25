@@ -48,6 +48,14 @@ try:
 except ImportError:
     pass
 
+try:
+    from mpi4py import MPI
+    rank = MPI.COMM_WORLD.rank
+    size = MPI.COMM_WORLD.size
+except ImportError:
+    rank = 0
+    size = 1
+
 PATH = os.environ.get("MICRO21CM")
 
 class BubbleModel(object):
@@ -231,6 +239,9 @@ class BubbleModel(object):
         self._ns = ns
 
         # Warn the user about unrecognized parameters
+        if rank > 0:
+            return
+
         for arg in _kw_:
             print("WARNING: Unrecognized parameter '{}'.".format(arg))
             print("         (maybe OK if you're just setting up a fit).")
@@ -1116,7 +1127,8 @@ class BubbleModel(object):
 
                 if not r_in_R:
                     r = _R_.max() if r_too_hi else r_too_lo
-                    print("Smoothing scale outside tabulated range [z={},r={}]".format(z, r))
+                    if rank == 0:
+                        print("Smoothing scale outside tabulated range [z={},r={}]".format(z, r))
 
                 var = var_f(r)
             else:
@@ -1262,7 +1274,8 @@ class BubbleModel(object):
         if (Q < tiny_Q) or (Q == 1):
             return -1, 0.0
 
-        if (Rmin is not None) and (self.effective_grid is not None):
+        if (Rmin is not None) and (self.effective_grid is not None) \
+            and (rank == 0):
             print("User-supplied `Rmin` will override `self.effective_grid`.")
 
         if self.use_volume_match == 1:

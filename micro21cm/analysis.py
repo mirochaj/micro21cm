@@ -396,10 +396,14 @@ class AnalyzeFit(object): # pragma: no cover
 
         data = self.data
         sh = data['blobs'].shape
+        try:
+            nsteps, nw, nz, nk = sh
+        except ValueError:
+            nsteps, nw, nz = sh
+            nk = 1
 
-        #if len(sh) == 4:
         if reshape:
-            _ps = np.reshape(data['blobs'], (sh[0]*sh[1],sh[2],sh[3]))
+            _ps = np.reshape(data['blobs'], (nsteps*nw,nz,nk))
         else:
             _ps = data['blobs']
 
@@ -444,7 +448,12 @@ class AnalyzeFit(object): # pragma: no cover
             cmap.set_array([])
 
         sh = self.data['blobs'].shape
-        nsteps, nw, nz, nk = sh
+        try:
+            nsteps, nw, nz, nk = sh
+        except ValueError:
+            nsteps, nw, nz = sh
+            nk = 1
+
         burn_per_w = burn // nw
         ibest = np.argwhere(self.data['lnprob'] == self.data['lnprob'].max())[0]
 

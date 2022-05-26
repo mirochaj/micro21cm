@@ -819,10 +819,12 @@ class FitHelper(object):
 
             # chain is (nwalkers, nsteps, nparams)
             # blobs iss (nsteps, nwalkers, nparams)
+            sblobs = sampler.blobs if sampler.blobs.ndim == 3 \
+                else np.array([sampler.blobs])
             data = {'chain': np.concatenate((chain, sampler.chain), axis=1),
                 'flatchain': np.concatenate((fchain, sampler.flatchain)),
                 'lnprob': np.concatenate((lnprob, sampler.lnprobability), axis=1),
-                'blobs': np.concatenate((blobs, np.array(sampler.blobs))),
+                'blobs': np.concatenate((blobs, sblobs)),
                 'facc': np.concatenate((facc,
                     np.array(sampler.acceptance_fraction))),
                 'kbins': self.tab_k, 'kblobs': self.tab_k,

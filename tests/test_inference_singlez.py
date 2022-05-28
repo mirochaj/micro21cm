@@ -70,10 +70,10 @@ def test():
     assert helper.fit_z.size == 1
     assert helper.tab_k.size == 2
     assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma'], helper.pinfo[0]
-    assert np.isfinite(helper.get_prior([0.1, 10., 5., 1., 1.]))
+    assert np.isfinite(helper.get_prior([0.1, 10., 5., 1.]))
     assert np.all(helper.k_mask == 0)
 
-    pars = helper.get_param_dict(z=8, args=[0.1, 10., 5., 1., 1.])
+    pars = helper.get_param_dict(z=8, args=[0.1, 10., 5., 1.])
 
     def loglikelihood(pars):
 
@@ -114,14 +114,16 @@ def test():
     for i in range(Ncheckpts):
         # Set initial positions of walkers
         if (kwargs['restart'] and os.path.exists(fn)) and (i > 0):
-            pos, data_pre = helper.restart_from(fn)
+            pos, data_pre, rstate = helper.restart_from(fn)
         else:
             data_pre = None
+            rstate = None
             pos = helper.get_initial_walker_pos()
 
         # Initialize sampler
         sampler = emcee.EnsembleSampler(kwargs['nwalkers'], helper.nparams,
             loglikelihood, pool=None)
+        sampler.random_state = rstate
 
         # Run it
         results = sampler.run_mcmc(pos, kwargs['checkpoint'])

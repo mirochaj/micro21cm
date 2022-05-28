@@ -768,6 +768,8 @@ class FitHelper(object):
         print("% Will augment {} samples/walker there with {} more (per walker).".format(
             steps_p, kwargs['checkpoint']))
 
+        rstate = data_pre['rstate']
+
         # Set initial walker positions
         pos = None
         if kwargs['regroup_after']:
@@ -797,7 +799,7 @@ class FitHelper(object):
         if pos is None:
             pos = data_pre['chain'][:,-1,:]
 
-        return pos, data_pre
+        return pos, data_pre, rstate
 
     def save_data(self, fn, sampler, data_pre=None):
         ##
@@ -830,7 +832,7 @@ class FitHelper(object):
                     np.array(sampler.acceptance_fraction))),
                 'kbins': self.tab_k, 'kblobs': self.tab_k,
                 'zfit': self.fit_z, 'data': self.fit_data,
-                'pinfo': self.pinfo,
+                'pinfo': self.pinfo, 'rstate': sampler.random_state,
                 'kwargs': self.kwargs}
         else:
             data = {'chain': sampler.chain, 'flatchain': sampler.flatchain,
@@ -839,7 +841,7 @@ class FitHelper(object):
                 'facc': sampler.acceptance_fraction,
                 'kbins': self.tab_k, 'kblobs': self.tab_k,
                 'zfit': self.fit_z, 'data': self.fit_data,
-                'pinfo': self.pinfo,
+                'pinfo': self.pinfo, 'rstate': sampler.random_state,
                 'kwargs': self.kwargs}
 
         with open(fn, 'wb') as f:

@@ -797,9 +797,9 @@ class FitHelper(object):
                 blobs = np.array([blobs])
 
             # chain is (nwalkers, nsteps, nparams)
-            # blobs iss (nsteps, nwalkers, nparams)
-            _sblobs = np.array(sampler.blobs)
-            sblobs = _sblobs if _sblobs.ndim == 5 else \
+            # blobs is (nsteps, nwalkers, nredshifts, nkbins)
+            _sblobs = sampler.blobs
+            sblobs = _sblobs if _sblobs.ndim == 4 else \
                 np.array([sampler.blobs])
             data = {'chain': np.concatenate((chain, sampler.chain), axis=1),
                 'flatchain': np.concatenate((fchain, sampler.flatchain)),

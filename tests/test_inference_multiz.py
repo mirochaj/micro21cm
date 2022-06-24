@@ -20,26 +20,18 @@ def test():
     sys_argv = ['scriptname', 'steps=1', 'checkpoint=1', 'nwalkers=16',
         'prior_tau=True', 'bubbles_pdf=lognormal', 'Ts_prior=[0,20]',
         'Ts_log10=False', 'prior_GP=[5.3,0.99]', 'Q_func=pl', 'Ts_func=pl',
-        'R_func=pl', 'sigma_const=1', 'Asys_val=1', 'fit_z=[0,1]',
+        'R_func=pl', 'sigma_const=1', 'Asys_val=1',
         'nonsense=hello_123']
 
     kwargs = micro21cm.inference.fit_kwargs.copy()
     kwargs.update(micro21cm.get_cmd_line_kwargs(sys_argv))
 
-    data = {'z': np.array([8., 10.])}
-    data_z8 = \
-    {
-     'k': np.array([0.2, 0.5]),
-     'Deltasq21': np.array([100., 200.]),
-     'errDeltasq21': np.array([10., 20.]),
-    }
-    data_z10 = \
-    {
-     'k': np.array([0.2, 0.5]),
-     'Deltasq21': np.array([50., 200.]),
-     'errDeltasq21': np.array([10., 20.]),
-    }
-    data['power'] = [data_z8, data_z10]
+    data = {}
+    data['k'] = np.array([0.2, 0.5])
+    data['fields'] = ['A']
+    data['z'] = np.array([8., 10.])
+    data['power'] = np.array([[[100., 200.]], [[50., 200.]]])
+    data['err'] = np.array([[[10., 20.]], [[10., 20.]]])
 
     # dummy (noise, cosmic variance)
     def get_error(z, k):

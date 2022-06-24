@@ -284,28 +284,23 @@ class FitHelper(object):
         return self.data['err']
 
     @property
+    def fit_fields(self):
+        if not hasattr(self, '_fit_fields'):
+            if 'fields' in self.data:
+                self._fit_fields = self.data['fields']
+            else:
+                self._fit_fields = None
+        return self._fit_fields
+
+    @property
     def fit_data(self):
-        return self.data['power']
         if not hasattr(self, '_fit_data'):
+            power = self.data['power']
 
+            assert power.shape == (self.fit_z.size, len(self.fit_fields),
+                self.tab_k.shape[2])
 
-            data_to_fit = []
-            for h, _z_ in enumerate(self.fit_z):
-                _data = self.data['power'][self.get_zindex_in_data(_z_)]
-
-                # Should apply window function here
-                if self.data_err_func is not None:
-                    _noise, _a21 = self.data_err_func(_z_, self.tab_k)
-                    ydat = _data['Deltasq21'][self.k_mask==0]
-                    perr = _data['errDeltasq21'][self.k_mask==0]
-                    yerr = _noise + _a21 * ydat + perr
-                else:
-                    ydat = _data['Deltasq21'][self.k_mask==0]
-                    yerr = _data['errDeltasq21'][self.k_mask==0]
-
-                data_to_fit.append([ydat, yerr])
-
-            self._fit_data = np.array(data_to_fit)
+            self._fit_data = power
 
         return self._fit_data
 
@@ -315,30 +310,18 @@ class FitHelper(object):
 
     @property
     def tab_k(self):
-        if not hasattr(self, '_kblobs'):
-            return self.data['k']
+        if not hasattr(self, '_tab_k'):
+            if self.data['k'].ndim == 1:
+                NzNb = np.prod(self.data['power'].shape[0:2])
+                self._tab_k = np.tile(self.data['k'], NzNb).reshape(
+                    self.data['power'].shape
+                )
+            else:
+                assert self.data['k'].shape == self.data['power'].shape
 
-            kblobs = self.data['power'][0]['k']
-            kmin = self.kwargs['data_kmin']
-            kmax = self.kwargs['data_kmax']
+            self._tab_k = self.data['k']
 
-            k_ok = np.logical_and(kblobs >= kmin, kblobs <= kmax)
-            kblobs = kblobs[k_ok==1]
-
-            if self.kwargs['data_kthin'] is not None:
-                kblobs = kblobs[::int(self.kwargs['data_kthin'])]
-
-            self._kblobs = kblobs
-            mask = np.ones(self.data['power'][0]['k'].size, dtype=int)
-            for i, k in enumerate(self.data['power'][0]['k']):
-                if k not in kblobs:
-                    continue
-
-                mask[i] = 0
-
-            self._k_mask = mask
-
-        return self._kblobs
+        return self._tab_k
 
     @property
     def k_mask(self):
@@ -349,25 +332,6 @@ class FitHelper(object):
     @property
     def fit_zindex(self):
         return np.arange(0, self.data['z'].size)
-
-        if not hasattr(self, '_fit_zindex'):
-
-
-            fit_z = self.kwargs['fit_z']
-
-            if type(fit_z) in [list, tuple, np.ndarray]:
-                pass
-            else:
-                fit_z = np.array([fit_z])
-
-            #if np.all(np.diff(self.data['z']) > 0):
-            #    fit_z = fit_z.size - fit_z - 1
-            #else:
-            #    pass
-
-            self._fit_zindex = np.array(fit_z, dtype=int)
-
-        return self._fit_zindex
 
     def get_z_from_index(self, i):
         return self.data['z'][i]

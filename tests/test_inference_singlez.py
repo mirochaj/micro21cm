@@ -45,14 +45,12 @@ def test():
     kwargs = micro21cm.inference.fit_kwargs.copy()
     kwargs.update(micro21cm.get_cmd_line_kwargs(sys_argv))
 
-    data = {'z': np.array([8.])}
-    data_z8 = \
-    {
-     'k': np.array([0.2, 0.5]),
-     'Deltasq21': np.array([100., 200.]),
-     'errDeltasq21': np.array([10., 20.]),
-    }
-    data['power'] = [data_z8]
+    data = {}
+    data['k'] = np.array([0.2, 0.5])
+    data['fields'] = ['A']
+    data['z'] = np.array([8.])
+    data['power'] = np.array([[[100., 200.]]])
+    data['err'] = np.array([[[10., 20.]]])
 
     # dummy (noise, cosmic variance)
     def get_error(z, k):

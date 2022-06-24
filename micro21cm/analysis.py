@@ -295,12 +295,16 @@ class AnalyzeFit(object): # pragma: no cover
                     nu, levels = get_error_2d(p2, p1, hist, [bc2, bc1], nu=nu)
 
                     # (columns, rows, histogram)
+                    kw = kwargs.copy()
+                    if 'color' in kw:
+                        del kw['color']
+
                     if fill:
                         _ax.contourf(bc2, bc1, hist.T / hist.max(),
-                            levels, zorder=4, **kwargs)
+                            levels, zorder=4, **kw)
                     else:
                         _ax.contour(bc2, bc1, hist.T / hist.max(),
-                            levels, zorder=4, **kwargs)
+                            levels, zorder=4, **kw)
                 else:
                     h, x, y, img = _ax.hist2d(p2, p1, bins=[bins[j], bins[i]],
                         cmap='viridis', norm=LogNorm())

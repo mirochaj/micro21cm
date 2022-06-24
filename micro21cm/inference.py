@@ -280,8 +280,14 @@ class FitHelper(object):
         return self._model
 
     @property
+    def fit_err(self):
+        return self.data['err']
+
+    @property
     def fit_data(self):
+        return self.data['power']
         if not hasattr(self, '_fit_data'):
+
 
             data_to_fit = []
             for h, _z_ in enumerate(self.fit_z):
@@ -310,6 +316,8 @@ class FitHelper(object):
     @property
     def tab_k(self):
         if not hasattr(self, '_kblobs'):
+            return self.data['k']
+
             kblobs = self.data['power'][0]['k']
             kmin = self.kwargs['data_kmin']
             kmax = self.kwargs['data_kmax']
@@ -340,7 +348,11 @@ class FitHelper(object):
 
     @property
     def fit_zindex(self):
+        return np.arange(0, self.data['z'].size)
+
         if not hasattr(self, '_fit_zindex'):
+
+
             fit_z = self.kwargs['fit_z']
 
             if type(fit_z) in [list, tuple, np.ndarray]:
@@ -368,6 +380,7 @@ class FitHelper(object):
 
     @property
     def fit_z(self):
+        return self.data['z']
         if not hasattr(self, '_fit_z'):
             self._fit_z = np.array([self.get_z_from_index(i) \
                 for i in self.fit_zindex])
@@ -822,7 +835,7 @@ class FitHelper(object):
             # chain is (nwalkers, nsteps, nparams)
             # blobs iss (nsteps, nwalkers, nparams)
             _sblobs = np.array(sampler.blobs)
-            sblobs = _sblobs if _sblobs.ndim == 3 else \
+            sblobs = _sblobs if _sblobs.ndim == 5 else \
                 np.array([sampler.blobs])
             data = {'chain': np.concatenate((chain, sampler.chain), axis=1),
                 'flatchain': np.concatenate((fchain, sampler.flatchain)),

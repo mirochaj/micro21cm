@@ -793,14 +793,14 @@ class FitHelper(object):
                 raise ValueError("k-bins used in previous fit are different!")
 
             # Happens if we only took one step before
-            if blobs.ndim == 2:
-                blobs = np.array([blobs])
+            #if blobs.ndim == 2:
+            #    blobs = np.array([blobs])
 
             # chain is (nwalkers, nsteps, nparams)
             # blobs is (nsteps, nwalkers, nredshifts, nkbins)
             _sblobs = sampler.blobs
-            sblobs = _sblobs if _sblobs.ndim == 4 else \
-                np.array([sampler.blobs])
+            sblobs = _sblobs if _sblobs.ndim == 4 else np.expand_dims(_sblobs, 2)
+
             data = {'chain': np.concatenate((chain, sampler.chain), axis=1),
                 'flatchain': np.concatenate((fchain, sampler.flatchain)),
                 'lnprob': np.concatenate((lnprob, sampler.lnprobability), axis=1),
@@ -812,9 +812,15 @@ class FitHelper(object):
                 'pinfo': self.pinfo, 'rstate': sampler.random_state,
                 'kwargs': self.kwargs}
         else:
+            if sampler.blobs.ndim == 3:
+                # Should only need to do this once.
+                blobs = np.expand_dims(sampler.blobs, 2)
+            else:
+                blobs = np.array(sampler.blobs)
+
             data = {'chain': sampler.chain, 'flatchain': sampler.flatchain,
                 'lnprob': sampler.lnprobability,
-                'blobs': np.array(sampler.blobs),
+                'blobs': blobs,
                 'facc': sampler.acceptance_fraction,
                 'kbins': self.tab_k, 'kblobs': self.tab_k,
                 'zfit': self.fit_z, 'data': self.fit_data,

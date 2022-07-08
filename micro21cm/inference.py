@@ -82,7 +82,7 @@ _guesses_R = {'pl': _guesses_R_pl, 'broad': _guesses_broad['R']}
 
 _guesses_T_dpl = {'p0': (5., 20.), 'p1': (8, 20), 'p2': (3, 7),
     'p3': (-2.5, -1.5)}
-_guesses_T_pl = {'p0': (0., 1.5), 'p1': (-10, 3.)} # recall: power_law_lognorm
+_guesses_T_pl = {'p0': (1., 30.), 'p1': (-10, 3.)}
 _guesses_T = {'broad': _guesses_broad['Ts'], 'dpl': _guesses_T_dpl,
      'pl': _guesses_T_pl}
 
@@ -115,7 +115,7 @@ _priors_s = {'pl': _priors_s_pl, 'linear': _priors_s_lin,
     'broad': _priors_broad['sigma']}
 
 _priors_T_dpl = {'p0': (0, 50), 'p1': (5, 30), 'p2': (0, 8), 'p3': (-6, 0)}
-_priors_T_pl = {'p0': (-1, 3), 'p1': (-20, 5)}
+_priors_T_pl = {'p0': (0.1, 1e3), 'p1': (-20, 5)}
 _priors_T = {'broad': _priors_broad['Ts'], 'dpl': _priors_T_dpl,
     'pl': _priors_T_pl}
 _priors_g = {'broad': _priors_broad['gamma']}
@@ -128,8 +128,6 @@ _priors = {'Q': _priors_Q, 'R': _priors_R, 'sigma': _priors_s,
 
 fit_kwargs = \
 {
- 'fit_z': 0, # If None, fits all redshifts!
-
  'prior_tau': False,
  'prior_GP': False,
 
@@ -162,10 +160,12 @@ fit_kwargs = \
  'Asys_prior': None,
 
  'Ts_log10': True,
+ 'Q_log10': False,
+ 'R_log10': False,
+ 'sigma_log10': False,
+ 'Asys_log10': False,
+ 'gamma_log10': False,
 
- 'data_kmin': 0.1,
- 'data_kmax': 1,
- 'data_kthin': None,
  'invert_logL': False,
  'upper_limits': False,
 
@@ -203,9 +203,6 @@ def power_law(z, pars):
 
 def power_law_Q(Q, pars):
     return pars[0] * (Q / 0.5)**pars[1]
-
-def power_law_lognorm(z, pars):
-    return 10**pars[0] * ((1 + z) / 8.)**pars[1]
 
 def power_law_max1(z, pars):
     return np.minimum(max_Q, power_law(z, pars))
@@ -265,14 +262,50 @@ def extract_params(all_pars, all_args, par):
     return _args
 
 class FitHelper(object):
-    def __init__(self, data=None, data_err_func=None, **kwargs):
+    def __init__(self, data=None, **kwargs):
+        """
+        Create a class that will make setting up MCMC fits easier.
+
+        Parameters
+        ----------
+        data : dict
+            Must contain following keys: 'err', 'power', 'k', 'z'.
+            Can provide power spectra for multiple k's, z's, and fields all at
+            once. The shape of, e.g., data['power'] should be (num redshifts,
+            num fields, num k modes). The same goes for data['k']. The
+            dataset data['z'] should just be a 1-D array corresponding to the
+            first axis of data['power'] and data['err'], while data['k'] can
+            either be a 1-D array (if all modes are the same regardless of
+            band or field) or a 3-D array of the same shape as data['power'].
+            If fitting multiple fields at once, it is recommended to also
+            pass names of the fields in data['fields'].
+        kwargs : dict, optional
+            Any remaining keyword arguments will be passed to the constructor
+            of a micro21cm.models.BubbleModel object that generates theory
+            models of the power spectrum. One can also provide additional
+            arguments that help setup the fit, e.g., `nwalkers`, `steps`, etc.
+
+        Useful functions
+        ----------------
+        - get_param_info: get info about model parameters.
+        - get_param_dict: convert list of numbers into dictionary that can
+            be understood by modeling class.
+        - get_prior: return the prior value for a set of parameters.
+        - get_initial_walker_pos: generate initial MCMC walker positions.
+        - save_data: write results of MCMC fit to disk.
+        - restart_from: get initial walker positions (and some other stuff)
+            from data output so we can restart from there.
+
+        """
         self.data = data
-        self.data_err_func = data_err_func
         self.kwargs = fit_kwargs.copy()
         self.kwargs.update(kwargs)
 
     @property
     def model(self):
+        """
+        Instance of micro21cm.models.BubbleModel that will be called in the fit.
+        """
         if not hasattr(self, '_model'):
             kwargs_model = self.get_model_kwargs()
             self._model = BubbleModel(**kwargs_model)
@@ -286,10 +319,10 @@ class FitHelper(object):
     @property
     def fit_fields(self):
         if not hasattr(self, '_fit_fields'):
+            self._fit_fields = None
             if 'fields' in self.data:
                 self._fit_fields = self.data['fields']
-            else:
-                self._fit_fields = None
+
         return self._fit_fields
 
     @property
@@ -298,7 +331,7 @@ class FitHelper(object):
             power = self.data['power']
 
             assert power.shape == (self.fit_z.size, len(self.fit_fields),
-                self.tab_k.shape[2])
+                self.fit_k.shape[2])
 
             self._fit_data = power
 
@@ -309,46 +342,22 @@ class FitHelper(object):
         return kw
 
     @property
-    def tab_k(self):
-        if not hasattr(self, '_tab_k'):
+    def fit_k(self):
+        if not hasattr(self, '_fit_k'):
             if self.data['k'].ndim == 1:
-                NzNb = np.prod(self.data['power'].shape[0:2])
-                self._tab_k = np.tile(self.data['k'], NzNb).reshape(
+                NzNf = np.prod(self.data['power'].shape[0:2])
+                self._fit_k = np.tile(self.data['k'], NzNf).reshape(
                     self.data['power'].shape
                 )
             else:
                 assert self.data['k'].shape == self.data['power'].shape
+                self._fit_k = self.data['k']
 
-            self._tab_k = self.data['k']
-
-        return self._tab_k
-
-    @property
-    def k_mask(self):
-        if not hasattr(self, '_k_mask'):
-            k = self.tab_k
-        return self._k_mask
-
-    @property
-    def fit_zindex(self):
-        return np.arange(0, self.data['z'].size)
-
-    def get_z_from_index(self, i):
-        return self.data['z'][i]
-
-    def get_zindex_in_data(self, z, ztol=1e-3):
-        j = np.argmin(np.abs(z - self.data['z']))
-        assert abs(self.data['z'][j] - z) < ztol
-
-        return j
+        return self._fit_k
 
     @property
     def fit_z(self):
         return self.data['z']
-        if not hasattr(self, '_fit_z'):
-            self._fit_z = np.array([self.get_z_from_index(i) \
-                for i in self.fit_zindex])
-        return self._fit_z
 
     def get_prefix_pars(self):
         prefix = ''
@@ -394,34 +403,6 @@ class FitHelper(object):
 
         return prefix
 
-    def get_prefix_fitrange(self):
-        prefix = ''
-        kwargs = self.kwargs
-
-        s_prior = ''
-
-        if kwargs['fit_z'] is None:
-            prefix += '_zall'
-            if kwargs['Qprior'] or kwargs['Rprior']:
-                prefix += '_' + s_prior
-        elif type(kwargs['fit_z']) in [list, tuple, np.ndarray]:
-            s = ''
-            for iz in kwargs['fit_z']:
-                s += str(int(iz))
-
-            prefix += '_z{}'.format(s)
-            if s_prior.strip():
-                prefix += '_' + s_prior
-        else:
-            prefix += '_z{}'.format(kwargs['fit_z'])
-
-        if kwargs['data_kmax'] is not None:
-            prefix += '_kmax_{:.1f}'.format(kwargs['data_kmax'])
-        if kwargs['data_kthin'] is not None:
-            prefix += '_kthin_{:.0f}'.format(kwargs['data_kthin'])
-
-        return prefix
-
     @property
     def prefix(self):
         if not hasattr(self, '_prefix'):
@@ -433,8 +414,6 @@ class FitHelper(object):
 
             prefix += self.get_prefix_pars()
             prefix += self.get_prefix_priors()
-            prefix += self.get_prefix_fitrange()
-
 
             if kwargs['suffix'] is not None:
                 prefix += '_{}'.format(kwargs['suffix'])
@@ -444,7 +423,10 @@ class FitHelper(object):
         return self._prefix
 
     def get_tau(self, pars):
-        Qofz = self.func_Q
+        """
+        Compute the CMB optical depth from a set of parameters.
+        """
+        Qofz = self._func_Q
 
         Y = self.model.cosmo.get_Y_p()
         y = 1. / (1. / Y - 1.) / 4.
@@ -474,83 +456,91 @@ class FitHelper(object):
         return tau
 
     @property
-    def func_Q(self):
-        if not hasattr(self, '_func_Q'):
-            self._func_Q = self.get_func('Q')
-        return self._func_Q
+    def _func_Q(self):
+        if not hasattr(self, '_func_Q_'):
+            self._func_Q_ = self.get_func('Q')
+        return self._func_Q_
 
     @property
-    def func_T(self):
-        if not hasattr(self, '_func_T'):
-            self._func_T = self.get_func('Ts')
-        return self._func_T
+    def _func_T(self):
+        if not hasattr(self, '_func_T_'):
+            self._func_T_ = self.get_func('Ts')
+        return self._func_T_
 
     @property
-    def func_R(self):
-        if not hasattr(self, '_func_R'):
-            self._func_R = self.get_func('R')
-        return self._func_R
+    def _func_R(self):
+        if not hasattr(self, '_func_R_'):
+            self._func_R_ = self.get_func('R')
+        return self._func_R_
 
     @property
-    def func_sigma(self):
-        if not hasattr(self, '_func_s'):
-            self._func_s = self.get_func('sigma')
-        return self._func_s
+    def _func_sigma(self):
+        if not hasattr(self, '_func_s_'):
+            self._func_s_ = self.get_func('sigma')
+        return self._func_s_
 
     @property
-    def func_gamma(self):
-        if not hasattr(self, '_func_g'):
-            self._func_g = self.get_func('gamma')
-        return self._func_g
+    def _func_gamma(self):
+        if not hasattr(self, '_func_g_'):
+            self._func_g_ = self.get_func('gamma')
+        return self._func_g_
 
     @property
-    def func_A(self):
-        if not hasattr(self, '_func_A'):
-            self._func_A = self.get_func('Asys')
-        return self._func_A
+    def _func_A(self):
+        if not hasattr(self, '_func_A_'):
+            self._func_A_ = self.get_func('Asys')
+        return self._func_A_
 
-    def func(self, par):
+    def _func(self, par):
         if par == 'Q':
-            return self.func_Q
+            return self._func_Q
         elif par == 'R':
-            return self.func_R
+            return self._func_R
         elif par == 'sigma':
-            return self.func_sigma
+            return self._func_sigma
         elif par == 'gamma':
-            return self.func_gamma
+            return self._func_gamma
         elif par == 'Ts':
-            return self.func_T
+            return self._func_T
         elif par == 'Asys':
-            return self.func_A
+            return self._func_A
         else:
             return None
 
     def get_func(self, par):
         name = par + '_func'
         if self.kwargs[name] is None:
-            func = None
+            _func = None
         elif self.kwargs[name] == 'linear':
-            func = lambda Q, pars: lin_Q(Q, pars)
+            _func = lambda Q, pars: lin_Q(Q, pars)
         elif self.kwargs[name] == 'erf':
-            func = lambda Q, pars: erf_Q(Q, pars)
+            _func = lambda Q, pars: erf_Q(Q, pars)
         elif self.kwargs[name] == 'tanh':
-            func = lambda z, pars: tanh_generic(z, pars)
+            _func = lambda z, pars: tanh_generic(z, pars)
         elif self.kwargs[name] == 'pl':
             if par == 'Q':
-                func = lambda z, pars: power_law_max1(z, pars)
+                _func = lambda z, pars: power_law_max1(z, pars)
             elif par == 'Ts':
-                func = lambda z, pars: power_law_lognorm(z, pars)
+                _func = lambda z, pars: power_law(z, pars)
             else:
-                func = lambda Q, pars: power_law_Q(Q, pars)
+                _func = lambda Q, pars: power_law_Q(Q, pars)
         elif self.kwargs[name] == 'bpl':
             if par == 'Q':
-                func = lambda z, pars: broken_power_law_max1(z, pars)
+                _func = lambda z, pars: broken_power_law_max1(z, pars)
             else:
-                func = lambda z, pars: broken_power_law(z, pars)
+                _func = lambda z, pars: broken_power_law(z, pars)
         elif self.kwargs[name] == 'dpl':
-            func = lambda z, pars: double_power_law(z, pars)
+            _func = lambda z, pars: double_power_law(z, pars)
         else:
             raise NotImplemented('help')
+
+        if _func is not None and self.kwargs['{}_log10'.format(par)]:
+            def func(z, pars):
+                _pars = np.array(pars)
+                _pars[0] = 10**pars[0]
+                return _func(z, _pars)
+        else:
+            func = _func
 
         return func
 
@@ -561,40 +551,56 @@ class FitHelper(object):
 
         return _priors[par][func][num]
 
-    def get_guesses_func(self, i):
+    def get_guess_range(self, param):
+        """
+        Return bounds of parameter space for i'th element in parameters list.
+
+        .. note :: Just used for guesses! May not be the full prior range.
+
+        See `get_param_info` for list of parameters.
+        """
+
         params, redshifts = self.pinfo
+
+        assert param in params, \
+            "Provided `param` not in list of parameters! Options: {}".format(
+            params
+            )
+
+        i = params.index(param)
         par_id = params[i]
 
-        # par_id something like Q_p0, s_p0, etc.
-        par, num = par_id.split('_')
+        # Treat parameterized functions separately
+        if np.isinf(redshifts[i]):
+            # par_id something like Q_p0, s_p0, etc.
+            par, num = par_id.split('_')
+            func = self.kwargs['{}_func'.format(par)]
+            lo, hi = _guesses[par][func][num]
+        else:
+            lo, hi = self._get_guesses_flex(i)
+            num = 0
+            par = par_id
 
-        func = self.kwargs['{}_func'.format(par)]
+        if self.kwargs['{}_log10'.format(par)] and num == 'p0':
+            lo = np.log10(lo)
+            hi = np.log10(hi)
 
-        return _guesses[par][func][num]
+        return lo, hi
 
-    def get_guesses_flex(self, i):
+    def _get_guesses_flex(self, i):
         params, redshifts = self.pinfo
         par = params[i]
 
-        # Can parameterize change in Q, R, rather than Q, R
-        # themselves.
-        if par == 'Q':
-            lo, hi = 0, 1
-        if par == 'R':
-            lo, hi = 0.1, 20
-        elif self.kwargs['{}_prior'.format(par)] is not None:
-            lo1, hi1 = _guesses[par]['broad']
-            lo2, hi2 = self.kwargs['{}_prior'.format(par)]
-            # Use narrowest range
-            lo = max(lo1, lo2)
-            hi = min(hi1, hi2)
+        # Potentially change default guess range to user-supplied prior.
+        if self.kwargs['{}_prior'.format(par)] is not None:
+            lo, hi = self.kwargs['{}_prior'.format(par)]
         else:
             lo, hi = _guesses[par]['broad']
 
         return lo, hi
 
     @property
-    def num_parametric(self):
+    def nparametric(self):
         if not hasattr(self, '_num_parametric'):
             num = 0
             for par in self.model.params:
@@ -629,7 +635,7 @@ class FitHelper(object):
                 elif func in ['lin', 'linear']:
                     N += 2
             else:
-                N += self.fit_zindex.size
+                N += self.fit_z.size
 
         return N
 
@@ -638,24 +644,21 @@ class FitHelper(object):
         return self.get_param_info()
 
     def get_initial_walker_pos(self):
+        """
+        Generate a set of initial walker positions that randomly and uniformly
+        sample the prior volume.
+
+        Returns
+        -------
+        An array with dimension (num walkers, num parameters).
+        """
+
         nwalkers = self.kwargs['nwalkers']
-
-        pos = np.zeros((nwalkers, self.nparams))
-
         params, redshifts = self.pinfo
 
+        pos = np.zeros((nwalkers, self.nparams))
         for i, par in enumerate(params):
-
-            # If parameterized, be careful
-            if np.isinf(redshifts[i]):
-                lo, hi = self.get_guesses_func(i)
-            else:
-                lo, hi = self.get_guesses_flex(i)
-
-            if par == 'Ts' and self.kwargs['Ts_log10']:
-                lo = np.log10(lo)
-                hi = np.log10(hi)
-
+            lo, hi = self.get_guess_range(par)
             pos[:,i] = lo + np.random.rand(nwalkers) * (hi - lo)
 
         return pos
@@ -663,13 +666,19 @@ class FitHelper(object):
     def get_param_info(self):
         """
         Figure out mapping from parameter list to parameter names and redshifts.
+
+        Returns
+        -------
+        Tuple containing (parameter names, redshifts for each parameter). Note
+        that if a parameter does not correspond to a single redshift, e.g.,
+        because it is a component of a parametric function, then the
+        redshift element will be -np.inf.
         """
 
         ct = 0
         param_z = []
         param_names = []
-        for i, iz in enumerate(self.fit_zindex):
-            _z_ = self.get_z_from_index(iz)
+        for i, _z_ in enumerate(self.fit_z):
 
             for j, par in enumerate(self.model.params):
                 if self.kwargs['{}_val'.format(par)] is not None:
@@ -686,7 +695,7 @@ class FitHelper(object):
                 param_names.append(par)
 
         # If parameterizing Q or R, these will be at the end.
-        if self.func_Q is not None:
+        if self._func_Q is not None:
             if self.kwargs['Q_func'] in ['tanh', 'pl']:
                 param_z.extend([-np.inf]*2)
                 param_names.extend(['Q_p0', 'Q_p1'])
@@ -698,7 +707,7 @@ class FitHelper(object):
                     self.kwargs['Q_func']
                 ))
 
-        if self.func_T is not None:
+        if self._func_T is not None:
             assert self.kwargs['Ts_func'] in ['dpl', 'pl']
 
             if self.kwargs['Ts_func'] == 'dpl':
@@ -709,17 +718,17 @@ class FitHelper(object):
                 param_z.extend([-np.inf]*2)
                 param_names.extend(['Ts_p0', 'Ts_p1'])
 
-        if self.func_R is not None:
+        if self._func_R is not None:
             assert self.kwargs['R_func'] == 'pl'
             param_z.extend([-np.inf]*2)
             param_names.extend(['R_p0', 'R_p1'])
 
-        if self.func_sigma is not None:
+        if self._func_sigma is not None:
             assert self.kwargs['sigma_func'] in ['pl', 'linear']
             param_z.extend([-np.inf]*2)
             param_names.extend(['sigma_p0', 'sigma_p1'])
 
-        if self.func_A is not None:
+        if self._func_A is not None:
             assert self.kwargs['Asys_func'] == 'erf'
             param_z.extend([-np.inf]*3)
             param_names.extend(['Asys_p0', 'Asys_p1', 'Asys_p2'])
@@ -729,6 +738,11 @@ class FitHelper(object):
     def restart_from(self, fn):
         """
         Read previous output and generate new positions for walkers.
+
+        Returns
+        -------
+        Tuple containing (position of all walkers, dictionary containing
+        full dataset read from previous output, random state for emcee).
         """
 
         f = open(fn, 'rb')
@@ -779,6 +793,19 @@ class FitHelper(object):
         return pos, data_pre, rstate
 
     def save_data(self, fn, sampler, data_pre=None):
+        """
+        Write data out to file with name `fn`.
+
+        Parameters
+        ----------
+        fn : str
+            Filename of output.
+        sampler : object
+            An emcee.EnsembleSampler object.
+        data_pre : dict
+            Data contained in last save file.
+
+        """
         ##
         # Write data
         # micro21cm.inference.write_chain(sampler, data_pre)
@@ -789,7 +816,7 @@ class FitHelper(object):
             blobs = np.array(data_pre['blobs'])
             facc = np.array(data_pre['facc'])
 
-            if not np.allclose(self.tab_k, data_pre['kblobs']):
+            if not np.allclose(self.fit_k, data_pre['kblobs']):
                 raise ValueError("k-bins used in previous fit are different!")
 
             # Happens if we only took one step before
@@ -807,7 +834,7 @@ class FitHelper(object):
                 'blobs': np.concatenate((blobs, sblobs)),
                 'facc': np.concatenate((facc,
                     np.array(sampler.acceptance_fraction))),
-                'kbins': self.tab_k, 'kblobs': self.tab_k,
+                'kbins': self.fit_k, 'kblobs': self.fit_k,
                 'zfit': self.fit_z, 'data': self.fit_data,
                 'pinfo': self.pinfo, 'rstate': sampler.random_state,
                 'kwargs': self.kwargs}
@@ -822,7 +849,7 @@ class FitHelper(object):
                 'lnprob': sampler.lnprobability,
                 'blobs': blobs,
                 'facc': sampler.acceptance_fraction,
-                'kbins': self.tab_k, 'kblobs': self.tab_k,
+                'kbins': self.fit_k, 'kblobs': self.fit_k,
                 'zfit': self.fit_z, 'data': self.fit_data,
                 'pinfo': self.pinfo, 'rstate': sampler.random_state,
                 'kwargs': self.kwargs}
@@ -852,12 +879,12 @@ class FitHelper(object):
                 _args = extract_params(allpars, args, par)
 
                 if par in ['Q', 'Ts']:
-                    pars[par] = self.func(par)(z, _args)
+                    pars[par] = self._func(par)(z, _args)
 
                     if par == 'Q':
                         Q_of_z = pars[par]
                 else:
-                    pars[par] = self.func(par)(Q_of_z, _args)
+                    pars[par] = self._func(par)(Q_of_z, _args)
 
             elif self.kwargs['{}_val'.format(par)] is not None:
                 pars[par] = self.kwargs['{}_val'.format(par)]
@@ -865,7 +892,6 @@ class FitHelper(object):
                 j = allpars.index(par)
                 pars[par] = args[j]
             else:
-
                 pok = np.zeros(len(allpars))
                 zok = np.zeros(len(allpars))
                 for k, element in enumerate(redshifts):
@@ -886,7 +912,7 @@ class FitHelper(object):
 
                 j = int(np.argwhere(ok==1))
 
-                if par == 'Ts' and self.kwargs['Ts_log10']:
+                if self.kwargs['{}_log10'.format(par)]:
                     pars[par] = 10**args[j]
                 else:
                     pars[par] = args[j]
@@ -896,34 +922,59 @@ class FitHelper(object):
 
         return pars
 
-    def get_prior(self, args):
+    def get_prior_range(self, param):
+        """
+        Return the prior range for parameter `param`.
+        """
 
-        model = self.model
+        params, redshifts = self.get_param_info()
+
+        assert param in params, \
+            "Provided `param` not in list of parameters! Options: {}".format(
+            params
+            )
+
+        i = params.index(param)
+
+        # Treat parameterized functions separately
+        if np.isinf(redshifts[i]):
+            par, num = param.split('_')
+            lo, hi = self.get_priors_func(param)
+        else:
+            lo, hi = _priors[param]['broad']
+            num = 0
+            par = param
+
+        # Allow user to override internal defaults.
+        # [do here to get 'par' in case we're parameterized]
+        if self.kwargs['{}_prior'.format(par)] is not None:
+            lo, hi = self.kwargs['{}_prior'.format(par)]
+
+        if self.kwargs['{}_log10'.format(par)] and num == 'p0':
+            lo = np.log10(lo)
+            hi = np.log10(hi)
+
+        return lo, hi
+
+    def get_prior(self, args):
+        """
+        Get prior for input set of parameters.
+
+        Parameters
+        ----------
+        args : list, tuple, np.ndarray
+            Single set of parameter values to be evaluated. Should be 1-D,
+            and be of length `self.nparams`.
+
+        """
+
         params, redshifts = self.get_param_info()
 
         for i, par_id in enumerate(params):
 
-            if np.isinf(redshifts[i]):
-                lo, hi = self.get_priors_func(par_id)
-            else:
-                par = par_id
-
-                if par == 'Ts' and self.kwargs['Ts_log10']:
-                    lo, hi = np.log10(_priors[par]['broad'])
-                elif self.kwargs['{}_prior'.format(par)] is not None:
-                    lo, hi = self.kwargs['{}_prior'.format(par)]
-                else:
-                    lo, hi = _priors[par]['broad']
+            lo, hi = self.get_prior_range(par_id)
 
             if not (lo <= args[i] <= hi):
-                return -np.inf
-
-        # Check to make sure peak in R^3 * dn/dlnR is within prior too?
-        lo, hi = _priors['R']['broad']
-        for z in self.fit_z:
-            pars_dict = self.get_param_dict(z, args)
-            Rp = pars_dict['R']
-            if not (lo <= Rp <= hi):
                 return -np.inf
 
         ##
@@ -931,7 +982,7 @@ class FitHelper(object):
         if type(self.kwargs['prior_GP']) in [list, tuple, np.ndarray]:
             zp, Qp = self.kwargs['prior_GP']
             Qpars = extract_params(params, args, 'Q')
-            if self.func_Q(zp, Qpars) < Qp:
+            if self._func_Q(zp, Qpars) < Qp:
                 return -np.inf
 
         ##

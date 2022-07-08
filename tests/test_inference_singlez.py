@@ -25,7 +25,6 @@ def test():
     micro21cm.inference.tanh_generic(zarr, [8, 2])
     micro21cm.inference.power_law(zarr, [10., 2])
     micro21cm.inference.power_law_Q(xarr, [10, 2])
-    micro21cm.inference.power_law_lognorm(xarr, [1, 2])
     micro21cm.inference.power_law_max1(zarr, [0.1, -2])
     micro21cm.inference.broken_power_law(zarr, [1, 10, -2, 2])
     micro21cm.inference.broken_power_law(9., [1, 10, -2, 2])
@@ -56,7 +55,7 @@ def test():
     def get_error(z, k):
         return 10. * np.ones_like(k), np.zeros_like(k)
 
-    helper = micro21cm.inference.FitHelper(data, get_error, **kwargs)
+    helper = micro21cm.inference.FitHelper(data, **kwargs)
 
     # Doesn't have to be model call here, make dumber just for speed.
     def get_ps(z, k, **kw):
@@ -66,30 +65,28 @@ def test():
     # Changed default to Asys_val=1 so nparams should be 4
     assert helper.nparams == 4, helper.pinfo[0]
     assert helper.fit_z.size == 1
-    assert helper.tab_k.size == 2
+    assert helper.fit_k.size == 2
     assert helper.pinfo[0] == ['Q', 'Ts', 'R', 'sigma'], helper.pinfo[0]
     assert np.isfinite(helper.get_prior([0.1, 10., 5., 1.]))
-    assert np.all(helper.k_mask == 0)
 
     pars = helper.get_param_dict(z=8, args=[0.1, 10., 5., 1.])
 
     def loglikelihood(pars):
 
-        blobs = -np.inf * np.ones((helper.fit_z.size, helper.tab_k.size))
+        blobs = -np.inf * np.ones_like(helper.fit_data)
 
         lnL = None
         for h, _z_ in enumerate(helper.fit_z):
 
-            _data = data['power'][h]
-
             pars_dict = helper.get_param_dict(_z_, pars)
 
-            ymod = get_ps(_z_, _data['k'], **pars_dict)
+            ymod = get_ps(_z_, data['k'], **pars_dict)
 
-            ydat = _data['Deltasq21'][helper.k_mask==0]
-            perr = _data['errDeltasq21'][helper.k_mask==0]
+            # Single field, hence [0]
+            ydat = data['power'][h][0]
+            perr = data['err'][h][0]
 
-            _noise, _a21 = get_error(_z_, _data['k'])
+            _noise, _a21 = get_error(_z_, data['k'])
             yerr = _noise + _a21 * ydat + perr
 
             _lnL = np.sum(-0.5 * (ydat - ymod)**2 / 2. / yerr**2)

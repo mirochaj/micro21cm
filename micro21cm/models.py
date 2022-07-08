@@ -69,7 +69,7 @@ class BubbleModel(object):
         omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
         use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
-        kmin=1e-5, kmax=None, dlogk=0.05, **_kw_):
+        kmin=1e-5, kmax=None, dlogk=0.05, verbose=True, debug=True, **_kw_):
         """
         Make a simple bubble model of the IGM.
 
@@ -174,6 +174,8 @@ class BubbleModel(object):
         self.use_pbar = use_pbar
         self.use_mcfit = use_mcfit
         self.effective_grid = effective_grid
+        self.verbose = verbose
+        self.debug = debug
 
         self.mcfit_kwargs = mcfit_kwargs
         self._kmin = kmin
@@ -242,9 +244,10 @@ class BubbleModel(object):
         if rank > 0:
             return
 
-        for arg in _kw_:
-            print("WARNING: Unrecognized parameter '{}'.".format(arg))
-            print("         (maybe OK if you're just setting up a fit).")
+        if debug and verbose:
+            for arg in _kw_:
+                print("WARNING: Unrecognized parameter '{}'.".format(arg))
+                print("         (maybe OK if you're just setting up a fit).")
 
         assert bubbles_model == 'fzh04', "Only option is fzh04 right now!"
 

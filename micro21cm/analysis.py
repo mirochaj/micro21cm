@@ -16,7 +16,7 @@ from .models import BubbleModel
 from scipy.ndimage import gaussian_filter
 from .inference import tanh_generic, power_law, power_law_max1, \
     broken_power_law, broken_power_law_max1, double_power_law, \
-    extract_params, power_law_lognorm, erf_Q, power_law_Q, lin_Q
+    extract_params, erf_Q, power_law_Q, lin_Q
 from .util import labels, bin_e2c, bin_c2e, get_error_2d
 
 try:
@@ -295,12 +295,16 @@ class AnalyzeFit(object): # pragma: no cover
                     nu, levels = get_error_2d(p2, p1, hist, [bc2, bc1], nu=nu)
 
                     # (columns, rows, histogram)
+                    kw = kwargs.copy()
+                    if 'color' in kw:
+                        del kw['color']
+
                     if fill:
                         _ax.contourf(bc2, bc1, hist.T / hist.max(),
-                            levels, zorder=4, **kwargs)
+                            levels, zorder=4, **kw)
                     else:
                         _ax.contour(bc2, bc1, hist.T / hist.max(),
-                            levels, zorder=4, **kwargs)
+                            levels, zorder=4, **kw)
                 else:
                     h, x, y, img = _ax.hist2d(p2, p1, bins=[bins[j], bins[i]],
                         cmap='viridis', norm=LogNorm())
@@ -704,8 +708,6 @@ class AnalyzeFit(object): # pragma: no cover
             elif fname == 'pl':
                 if _par_ == 'Q':
                     func = power_law_max1
-                elif _par_ == 'Ts':
-                    func = power_law_lognorm
                 elif _par_ == 'R':
                     func = power_law_Q
                 else:

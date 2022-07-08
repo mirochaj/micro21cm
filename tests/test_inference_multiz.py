@@ -19,33 +19,25 @@ def test():
     # fake command-line arguments
     sys_argv = ['scriptname', 'steps=1', 'checkpoint=1', 'nwalkers=16',
         'prior_tau=True', 'bubbles_pdf=lognormal', 'Ts_prior=[0,20]',
-        'Ts_log10=False', 'prior_GP=[5.3,0.99]', 'Q_func=pl', 'Ts_func=pl',
-        'R_func=pl', 'sigma_const=1', 'Asys_val=1', 'fit_z=[0,1]',
-        'nonsense=hello_123']
+        'Ts_log10=True', 'prior_GP=[5.3,0.99]', 'Q_func=pl', 'Ts_func=pl',
+        'R_func=pl', 'sigma_const=1', 'Asys_val=1',
+        'nonsense=hello_123', 'prior_tau=True']
 
     kwargs = micro21cm.inference.fit_kwargs.copy()
     kwargs.update(micro21cm.get_cmd_line_kwargs(sys_argv))
 
-    data = {'z': np.array([8., 10.])}
-    data_z8 = \
-    {
-     'k': np.array([0.2, 0.5]),
-     'Deltasq21': np.array([100., 200.]),
-     'errDeltasq21': np.array([10., 20.]),
-    }
-    data_z10 = \
-    {
-     'k': np.array([0.2, 0.5]),
-     'Deltasq21': np.array([50., 200.]),
-     'errDeltasq21': np.array([10., 20.]),
-    }
-    data['power'] = [data_z8, data_z10]
+    data = {}
+    data['k'] = np.array([[[0.2, 0.5]], [[0.2, 0.5]]])
+    data['fields'] = ['A']
+    data['z'] = np.array([8., 10.])
+    data['power'] = np.array([[[100., 200.]], [[50., 200.]]])
+    data['err'] = np.array([[[10., 20.]], [[10., 20.]]])
 
     # dummy (noise, cosmic variance)
     def get_error(z, k):
         return 10. * np.ones_like(k), np.zeros_like(k)
 
-    helper = micro21cm.inference.FitHelper(data, get_error, **kwargs)
+    helper = micro21cm.inference.FitHelper(data, **kwargs)
 
     # Do an actual model here to test more machinery.
     def get_ps(z, k, **kw):
@@ -54,14 +46,18 @@ def test():
     par_list = ['sigma', 'Q_p0', 'Q_p1', 'Ts_p0', 'Ts_p1', 'R_p0', 'R_p1']
 
     assert helper.nparams == 7, helper.pinfo[0]
+    assert helper.fit_err.shape == helper.fit_data.shape
     assert helper.fit_z.size == 2
-    assert helper.tab_k.size == 2
+    assert helper.fit_k.size == 4
     assert helper.pinfo[0] == par_list, helper.pinfo[0]
-    assert helper.num_parametric == 3
-    assert helper.func_sigma == None
-    assert helper.func('sigma') is None
-    assert helper.func_gamma == None
-    assert helper.func('gamma') is None
+    assert helper.nparametric == 3
+    assert helper._func_sigma == None
+    assert helper._func('sigma') is None
+    assert helper._func_gamma == None
+    assert helper._func('gamma') is None
+
+    # Example tau
+    assert 0.04 <= helper.get_tau([0.5, -5]) <= 0.1
 
     pos = helper.get_initial_walker_pos()
 
@@ -75,7 +71,7 @@ def test():
 
     def loglikelihood(pars):
 
-        blobs = -np.inf * np.ones((helper.fit_z.size, helper.tab_k.size))
+        blobs = -np.inf * np.ones_like(helper.fit_data)
 
         # Get prior (unenforced in this test to make sure model is called)
         lnP = helper.get_prior(pars)
@@ -83,16 +79,14 @@ def test():
         lnL = None
         for h, _z_ in enumerate(helper.fit_z):
 
-            _data = data['power'][h]
-
             pars_dict = helper.get_param_dict(_z_, pars)
+            ymod = get_ps(_z_, data['k'][h,0], **pars_dict)
 
-            ymod = get_ps(_z_, _data['k'], **pars_dict)
+            # Single field, hence [0]
+            ydat = data['power'][h][0]
+            perr = data['err'][h][0]
 
-            ydat = _data['Deltasq21'][helper.k_mask==0]
-            perr = _data['errDeltasq21'][helper.k_mask==0]
-
-            _noise, _a21 = get_error(_z_, _data['k'])
+            _noise, _a21 = get_error(_z_, data['k'][h,0])
             yerr = _noise + _a21 * ydat + perr
 
             _lnL = np.sum(-0.5 * (ydat - ymod)**2 / 2. / yerr**2)
@@ -101,7 +95,7 @@ def test():
             else:
                 lnL += _lnL
 
-            blobs[h,:] = ymod
+            blobs[h,0,:] = ymod
 
         if np.isnan(lnL):
             return -np.inf, blobs

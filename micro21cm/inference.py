@@ -532,7 +532,7 @@ class FitHelper(object):
         elif self.kwargs[name] == 'dpl':
             _func = lambda z, pars: double_power_law(z, pars)
         else:
-            raise NotImplemented('help')
+            raise NotImplemented('Unrecognized option for par="{}"'.format(par))
 
         if _func is not None and self.kwargs['{}_log10'.format(par)]:
             def func(z, pars):
@@ -578,7 +578,7 @@ class FitHelper(object):
             lo, hi = _guesses[par][func][num]
         else:
             lo, hi = self._get_guesses_flex(i)
-            num = 0
+            num = 'p0'
             par = par_id
 
         if self.kwargs['{}_log10'.format(par)] and num == 'p0':
@@ -942,7 +942,7 @@ class FitHelper(object):
             lo, hi = self.get_priors_func(param)
         else:
             lo, hi = _priors[param]['broad']
-            num = 0
+            num = 'p0'
             par = param
 
         # Allow user to override internal defaults.

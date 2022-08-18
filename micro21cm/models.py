@@ -28,6 +28,7 @@ km_per_mpc = km_per_pc * 1e6
 cm_per_pc = km_per_pc*1e5
 cm_per_mpc = cm_per_pc*1e6
 g_per_msun = 1.98892e33
+m_H = 1.673532518188e-24
 
 try:
     import camb
@@ -278,6 +279,23 @@ class BubbleModel(object):
         if not hasattr(self, '_cosmo_'):
             self._init_cosmology()
         return self._cosmo_
+
+    @property
+    def yHe(self):
+        if not hasattr(self, '_yhe'):
+            cosm = self.cosmo
+            self._yhe = 1. / (1. / cosm.YHe - 1.) / 4.
+        return self._yhe
+
+    def get_hubble_param(self, z):
+        return (self.cosmo.h * 100. / km_per_mpc) * np.sqrt(self.omega_m_0) * (1. + z)**1.5
+
+    def get_rho_crit(self, z):
+        return (3.0 * self.get_hubble_param(z)**2) / (8.0 * np.pi * G)
+
+    def get_nH(self, z):
+        return (1. - self.cosmo.YHe) * (self._rho_m * g_per_msun / cm_per_mpc**3) \
+            * (self.cosmo.omegab / self.cosmo.omegam) / m_H
 
     def get_Tcmb(self, z):
         """ Return the CMB temperature at redshift `z` in K."""
@@ -1044,6 +1062,9 @@ class BubbleModel(object):
 
         return P1e * (1 - P1e) * (1 - P1)
 
+    def get_cf_dd(self, z, **_kw_):
+        return self.get_dd(z, **_kw_)
+
     def get_dd(self, z, **_kw_):
         """
         Get the matter correlation function, equivalent to <dd'>.
@@ -1553,6 +1574,68 @@ class BubbleModel(object):
 
         return ps / 2. / self.get_alpha(z, Ts)
 
+    def get_ps_ee(self, z, k, Q=0.5, R=5., sigma=1, gamma=None, alpha=0.,
+        xi_bb=None, Ts=np.inf, Asys=1., **_kw_):
+        """
+        Returns the power spectrum of the electron density field.
+        """
+
+        cf_ee = self.get_cf_ee(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha, xi_bb=xi_bb, Ts=Ts, Asys=Asys, **_kw_)
+
+        if np.all(cf_ee == 0) and (Q == 0):
+            return np.zeros_like(k)
+
+        return self.get_ps_from_cf(k, cf_ee)
+
+    def get_cf_ee(self, z, Q=0.5, R=5., sigma=1, gamma=None, alpha=0.,
+        xi_bb=None, Ts=np.inf, Asys=1., **_kw_):
+        """
+        Returns the correlation function of the electron density field.
+        """
+
+        # Get ionization CF
+        bb = self.get_bb(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+        bn = self.get_bn(z, Q=Q, R=R, sigma=sigma, gamma=gamma,
+            alpha=alpha)
+        # Get matter CF
+        dd = self.get_dd(z)
+
+        #bd, bbd, bdd, bbdd, bbd_1pt, bd_1pt = \
+        #    self.get_cross_terms(z, separate=True, Q=Q, R=R,
+        #        sigma=sigma, gamma=gamma, alpha=alpha, xi_bb=xi_bb,
+        #        Rmin=self.effective_grid, **_kw_)
+
+        # Get mean bubble density (fractional overdensity of ionized gas)
+        d_i = self.get_bubble_density(z, Q=Q, sigma=sigma, R=R)
+
+        if Q == 1:
+            d_n = 0.0
+        else:
+            d_n = -d_i * Q / (1. - Q)
+
+        bd = d_i * bb + d_n * bn
+        bd_1pt = d_i * Q
+        bbd = d_i * bb
+        bdd = Q * dd
+        bbdd = bb * dd + bd**2 + bd_1pt**2
+
+        #norm = self.get_nH(z)**2 * (1. + self.yHe)**2
+
+        #bbd = (bb * d_ion - Q**2 * dd - bd**2) * 0.5
+        #bd_1pt = 0.0
+        #bbdd = bb * dd + bd**2 + bd_1pt**2
+
+        # <n n'>
+        nn = bb + 2 * bbd + bbdd
+        # <n>^2
+        nsq = Q**2 + 2 * Q * bd_1pt + bd_1pt**2
+
+        cf_ee = nn - nsq
+
+        return Asys * cf_ee
+
     def _get_ps_bx(self, z, k, Q=0.5, R=5., sigma=1, gamma=None,
         alpha=0., xi_bb=None, which_ps='bb', Asys=1, **_kw_):
         """
@@ -1651,28 +1734,55 @@ class BubbleModel(object):
             if np.all(cf_21 == 0) and (Q == 1):
                 return np.zeros_like(k)
 
-            # Causes problems for mcfit
-            if self.use_mcfit:
-                if np.any(cf_21 < 0):
-                    cf_21[cf_21 < 0] = tiny_cf
-
-            # Setup interpolant
-            if self.use_mcfit:
-                _k_, _ps_21 = get_ps_from_cf_tab(self.tab_R, cf_21,
-                    **self.mcfit_kwargs)
-                ps_21 = np.interp(np.log(k), np.log(_k_), _ps_21)
-            else:
-                _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
-                    bounds_error=False, fill_value=0.)
-                f_cf = lambda RR: _fcf.__call__(np.log(RR))
-
-                if type(k) != np.ndarray:
-                    k = np.array([k])
-
-                ps_21 = get_ps_from_cf_func(k, f_cf=f_cf,
-                    Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
+            ps_21 = self.get_ps_from_cf(k, cf_21)
+#
+            ## Causes problems for mcfit
+            #if self.use_mcfit:
+            #    if np.any(cf_21 < 0):
+            #        cf_21[cf_21 < 0] = tiny_cf
+#
+            ## Setup interpolant
+            #if self.use_mcfit:
+            #    _k_, _ps_21 = get_ps_from_cf_tab(self.tab_R, cf_21,
+            #        **self.mcfit_kwargs)
+            #    ps_21 = np.interp(np.log(k), np.log(_k_), _ps_21)
+            #else:
+            #    _fcf = interp1d(np.log(self.tab_R), cf_21, kind='cubic',
+            #        bounds_error=False, fill_value=0.)
+            #    f_cf = lambda RR: _fcf.__call__(np.log(RR))
+#
+            #    if type(k) != np.ndarray:
+            #        k = np.array([k])
+#
+            #    ps_21 = get_ps_from_cf_func(k, f_cf=f_cf,
+            #        Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
         return ps_21
+
+    def get_ps_from_cf(self, k, cf):
+
+        # Causes problems for mcfit
+        if self.use_mcfit:
+            pass
+            #if np.any(cf < 0):
+            #    cf[cf < 0] = tiny_cf
+
+        # Setup interpolant
+        if self.use_mcfit:
+            _k_, _ps = get_ps_from_cf_tab(self.tab_R, cf, **self.mcfit_kwargs)
+            ps = np.interp(np.log(k), np.log(_k_), _ps)
+        else:
+            _fcf = interp1d(np.log(self.tab_R), cf, kind='cubic',
+                bounds_error=False, fill_value=0.)
+            f_cf = lambda RR: _fcf.__call__(np.log(RR))
+
+            if type(k) != np.ndarray:
+                k = np.array([k])
+
+            ps = get_ps_from_cf_func(k, f_cf=f_cf,
+                Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
+
+        return ps
 
     def get_rsd_boost_dd(self, mu):
         # This is just \int_{\mu_{\min}}^1 d\mu (1 + \mu^2)^2
@@ -1727,6 +1837,8 @@ class BubbleModel(object):
         if which_ps == 'bb':
             func_ps = self.get_ps_bb
             z = np.inf
+        elif which_ps == 'ee':
+            func_ps = self.get_ps_ee
         elif which_ps == '21cm':
             func_ps = self.get_ps_21cm
             assert z is not None, "Must provide `z` for 21-cm PS!"
@@ -1794,7 +1906,7 @@ class BubbleModel(object):
         elif (not free_Ts) and free_R and not (free_sigma or free_gamma):
             ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=Ts,
                 Asys=Asys, R=10**pars[0], sigma=sigma, gamma=gamma)
-            guess = [-1. + Q * 2]
+            guess = [0. + Q * 2]
             pmap = ['R']
         elif free_Ts and (not free_R) and not (free_sigma or free_gamma):
             ps = lambda pars: func_ps(z=z, k=k_in, Q=Q, Ts=10**pars[0],

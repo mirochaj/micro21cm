@@ -64,6 +64,7 @@ class BubbleModel(object):
         bubbles_pdf='lognormal', bubbles_model='fzh04',
         include_adiabatic_fluctuations=True, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=1, include_mu_gt=-1.,
+        include_density_gradient=0,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         effective_grid=None, normalize_via_bmf=False, self_consistent_density=0,
@@ -197,6 +198,8 @@ class BubbleModel(object):
         self.approx_linear = approx_linear
         self.density_pdf = density_pdf
         self.zrange = zrange
+
+        self.include_density_gradient = include_density_gradient
 
         self.params = ['Q', 'Ts']
         if self.bubbles:
@@ -1266,7 +1269,7 @@ class BubbleModel(object):
         return quad(integrand_full, 0.0, np.inf, **ikw)[0]
 
     def get_density_threshold(self, z, Q=0.0, R=5., sigma=1,
-        gamma=0, alpha=0, Rmin=None, **_kw_):
+        gamma=0, alpha=0, Rmin=None, Rsm=None, **_kw_):
         """
         Use "volume matching" to determine density level above which
         gas is ionized.
@@ -1302,7 +1305,9 @@ class BubbleModel(object):
             and (rank == 0):
             print("User-supplied `Rmin` will override `self.effective_grid`.")
 
-        if self.use_volume_match == 1:
+        if Rsm is not None:
+            pass
+        elif self.use_volume_match == 1:
             Rsm = R
         elif self.use_volume_match == 2: # pragma: no cover
             bsd = self.get_bsd(z=z, Q=Q, R=R, sigma=sigma, gamma=gamma,
@@ -1347,7 +1352,7 @@ class BubbleModel(object):
         return x_thresh, w
 
     def get_bubble_density(self, z, Q=0.0, R=5., sigma=1, gamma=0., alpha=0,
-        Rmin=None, **_kw_):
+        Rmin=None, Rsm=None, **_kw_):
         """
         Return mean density in ionized regions.
         """
@@ -1357,7 +1362,8 @@ class BubbleModel(object):
             return 0.0
 
         x_thresh, w = self.get_density_threshold(z, Q=Q, R=R,
-            sigma=sigma, gamma=gamma, alpha=alpha, Rmin=Rmin, **_kw_)
+            sigma=sigma, gamma=gamma, alpha=alpha, Rmin=Rmin,
+            Rsm=Rsm, **_kw_)
 
         # Normalization factor
         norm = 0.5 * erfc(x_thresh / w / np.sqrt(2.))
@@ -1610,12 +1616,23 @@ class BubbleModel(object):
         # Get mean bubble density (fractional overdensity of ionized gas)
         d_i = self.get_bubble_density(z, Q=Q, sigma=sigma, R=R)
 
+        ##
+        # NOTE: multiply d_i by (1 + y)?
+
         if Q == 1:
             d_n = 0.0
         else:
             d_n = -d_i * Q / (1. - Q)
 
-        bd = d_i * bb + d_n * bn
+        if self.include_density_gradient:
+            raise NotImplemented('help')
+
+        
+
+        else:
+            bd = d_i * bb + d_n * bn
+
+
         bd_1pt = d_i * Q
         bbd = d_i * bb
         bdd = Q * dd

@@ -64,14 +64,27 @@ class Box(BubbleModel):
 
         return path
 
-    def get_box_name(self, Q, which_box='bubbles', Lbox=100, vox=1., seed=None):
-        fn = 'box_{}_L{:.0f}_v_{:.1f}_Q_{:.2f}_seed_{}'.format(which_box,
-            Lbox, vox, Q, seed)
+    def get_box_name(self, Q, which_box='bubbles', Lbox=100, vox=1., slab=None,
+        filter_unresolved=True, include_cross_corr=False, seed=None):
+
+        if slab is not None:
+            fn = 'box_{}_L{:.0f}_dz_{:.1f}_v_{:.1f}_Q_{:.2f}_seed_{}'.format(
+                which_box, Lbox, slab[1]-slab[0], vox, Q, seed)
+        else:
+            fn = 'box_{}_L{:.0f}_v_{:.1f}_Q_{:.2f}_seed_{}'.format(which_box,
+                Lbox, vox, Q, seed)
+
+        if which_box in ['21cm', 'bubbles']:
+            fn = fn.replace('v_{:.1f}'.format(vox),
+                'v_{:.1f}_Rmin_{:.1f}'.format(vox, filter_unresolved))
+
+        if include_cross_corr:
+            fn += '_xdcorr'
 
         return fn
 
     def generate_boxes(self, Q, z=None, which_box='bubbles',
-        allow_partial_ionization=0, path='.',
+        allow_partial_ionization=0, path='.', slab=None,
         seeds=None, Lbox=100., vox=1., clobber=False, **kwargs): # pragma: no cover
         """
         Generate a series of boxes at different Q's so we can save time later
@@ -111,20 +124,17 @@ class Box(BubbleModel):
 
         path = self.get_box_path(Q, z=z, which_box=which_box,
             allow_partial_ionization=allow_partial_ionization, path=path,
-            seeds=seeds, Lbox=Lbox, vox=vox, **kwargs)
+            seeds=seeds, Lbox=Lbox, vox=vox, slab=slab, **kwargs)
 
         if not os.path.exists(path):
             os.mkdir(path)
 
-        pb = ProgressBar(Q.size, name='box(Q)')
-        pb.start()
-
         # Loop over Q and save boxes
         for i, _Q_ in enumerate(Q):
-            pb.update(i)
 
             fn = path + '/' \
-                + self.get_box_name(_Q_, which_box=which_box, Lbox=Lbox, vox=vox) \
+                + self.get_box_name(_Q_, which_box=which_box, Lbox=Lbox,
+                    vox=vox, filter_unresolved=filter_unresolved, slab=slab) \
                 + '.hdf5'
 
             if not self.use_h5py:
@@ -134,7 +144,7 @@ class Box(BubbleModel):
                 print("Found box {}. Moving on...".format(fn))
                 continue
 
-            box = box_func(z, Q=_Q_, Lbox=Lbox, vox=vox,
+            box = box_func(z, Q=_Q_, Lbox=Lbox, vox=vox, slab=slab,
                 allow_partial_ionization=allow_partial_ionization, seed=seeds[i],
                 **kwargs)
 
@@ -147,22 +157,25 @@ class Box(BubbleModel):
 
             print("Wrote {}.".format(fn))
 
-        pb.finish()
-
     def load_box(self, path='.', Lbox=100., vox=1., Q=0.0, Ts=np.inf,
         R=5., sigma=1, gamma=0., which_box='bubbles',
-        allow_partial_ionization=True, z=None, seed=None):
+        allow_partial_ionization=True, filter_unresolved=True,
+        include_cross_corr=False, slab=None,
+        z=None, seed=None):
         """
         Try to load pre-existing box if we find an exact match.
         """
 
         path = self.get_box_path(Q, z=z, which_box=which_box,
-            allow_partial_ionization=allow_partial_ionization, path=path,
+            allow_partial_ionization=allow_partial_ionization,
+            include_cross_corr=include_cross_corr,
+            path=path,
             seed=seed, Lbox=Lbox, vox=vox, Ts=Ts, R=R, sigma=sigma, gamma=gamma)
 
         fn = path + '/' \
             + self.get_box_name(Q, which_box=which_box, Lbox=Lbox, vox=vox,
-                seed=seed) \
+                filter_unresolved=filter_unresolved,
+                include_cross_corr=include_cross_corr, seed=seed) \
             + '.hdf5'
 
         if not self.use_h5py:
@@ -184,7 +197,24 @@ class Box(BubbleModel):
 
         return None
 
-    def get_box_density(self, z, vox=1., Lbox=100., seed=None):
+    def get_lightcone(self, z, vox=1., fov=1., seed=None):
+        """
+        Generate a lightcone realization of the bubble model.
+
+        .. note :: Basically interpolating boxes onto a new mesh, and trying
+            to be clever about not generating the whole box -- just the narrow
+            slice corresponding to the specified LOS domain in cMpc or frequency.
+
+        Parameters
+        ----------
+        z : int, float
+            Redshift
+
+
+        """
+        pass
+
+    def get_box_density(self, z, vox=1., Lbox=100., seed=None, slab=None):
         """
         Create a density box using Steven Murray's `powerbox` package.
         """
@@ -207,8 +237,9 @@ class Box(BubbleModel):
         return rho
 
     def get_box_21cm(self, z, Lbox=100., vox=1., Q=0.0, Ts=np.inf,
-        R=5., sigma=1, gamma=0., path='.',
-        allow_partial_ionization=True, seed=None, seed_rho=None):
+        R=5., sigma=1, gamma=0., path='.', slab=None,
+        allow_partial_ionization=True, filter_unresolved=True,
+        seed=None, seed_rho=None, box_ion=None, box_rho=None):
         """
         Create a 3-D realization of the 21-cm field.
 
@@ -246,7 +277,7 @@ class Box(BubbleModel):
 
         """
 
-        assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `box`!"
+        assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `vox`!"
 
         box_disk = self.load_box(path=path, Q=Q, z=z, which_box='21cm',
             allow_partial_ionization=allow_partial_ionization,
@@ -255,15 +286,23 @@ class Box(BubbleModel):
         if box_disk is not None:
             return box_disk
 
-        xHI, Nb = self.get_box_bubbles(z, Lbox=Lbox, vox=vox, Q=Q,
-            R=R, sigma=sigma, gamma=gamma, seed=seed,
-            allow_partial_ionization=allow_partial_ionization)
+        if box_ion is not None:
+            xHI = 1 - box_ion
+        else:
+            xHII, Nb = self.get_box_bubbles(z, Lbox=Lbox, vox=vox, Q=Q,
+                R=R, sigma=sigma, gamma=gamma, seed=seed,
+                allow_partial_ionization=allow_partial_ionization,
+                filter_unresolved=filter_unresolved)
+            xHI = 1 - xHII
 
         # Set bulk IGM temperature
         T0 = self.get_dTb_bulk(z, Ts=Ts)
 
         # Density box, no correlation with bubble box.
-        rho = self.get_box_density(z, vox, Lbox, seed=seed_rho)
+        if box_rho is not None:
+            rho = box_rho
+        else:
+            rho = self.get_box_density(z, vox, Lbox, seed=seed_rho)
 
         # Brightness temperature box
         dTb = T0 * xHI * (1. + rho)
@@ -283,8 +322,9 @@ class Box(BubbleModel):
             return None
 
     def get_box_bubbles(self, z, Lbox=100., vox=1., Q=0.5,  R=5., sigma=1,
-        gamma=0., allow_partial_ionization=False, seed=None,
-        path='.', **_kw_):
+        gamma=0., allow_partial_ionization=False, seed=None, slab=None,
+        path='.', filter_unresolved=True, include_cross_corr=False,
+        box_rho=None, **_kw_):
         """
         Make a 3-d realization of the bubble field.
 
@@ -305,7 +345,7 @@ class Box(BubbleModel):
 
         Returns
         -------
-        A tuple of two elements: first, just the ionization box (ones and zeros),
+        A tuple of two elements: first, the ionized fraction (ones and zeros),
         and second, a box containing the number of bubbles that engulf every
         single point, which can have any integer value > 0. The latter is
         used largely for diagnosing overlap. Each is a 3-d array with dimensions
@@ -315,8 +355,14 @@ class Box(BubbleModel):
 
         assert (Lbox / vox) % 1 == 0, "`Lbox` must be integer multiple of `box`!"
 
-        args = (z, Lbox, vox, Q, R, sigma, gamma,
-            allow_partial_ionization, seed)
+        if slab is not None:
+            assert (slab / vox) % 1 == 0
+            Nz = slab // vox
+        else:
+            Nz = Lbox // vox
+
+        args = (z, Lbox, vox, Q, R, sigma, gamma, allow_partial_ionization,
+            filter_unresolved, include_cross_corr, slab, seed)
 
         cached_result = self._cache_box('bubbles', args)
 
@@ -326,6 +372,9 @@ class Box(BubbleModel):
 
         box_disk = self.load_box(path=path, Q=Q, z=z, which_box='bubbles',
             allow_partial_ionization=allow_partial_ionization,
+            filter_unresolved=filter_unresolved,
+            include_cross_corr=include_cross_corr,
+            slab=slab,
             seed=seed, Lbox=Lbox, vox=vox, R=R, sigma=sigma, gamma=gamma)
 
         if box_disk is not None:
@@ -350,25 +399,90 @@ class Box(BubbleModel):
         n = np.random.rand(num)
         R_r = np.exp(np.interp(np.log(n), np.log(cdf), np.log(self.tab_R)))
 
-        # Randomly generate (x, y, z) positions for all bubbles in cMpc units.
-        p_len = np.random.rand(num*3).reshape(num, 3) * Lbox
+        # Remove bubbles smaller than the grid scale?
+        if filter_unresolved:
+            small = R_r < vox * filter_unresolved
+            print('* Filtered out {:.1f}% of bubbles'.format(sum(small) / float(num)))
+
+            R_r = R_r[~small]
+            num = np.sum(np.logical_not(small))
+
+        # Filter out bubbles smaller than voxel size?
+
+        ##
+        # Impose correlation between density and bubbles.
+        if include_cross_corr:
+            assert box_rho is not None, \
+                "Must provide density box when include_cross_corr=True."
+            assert np.all(np.array(box_rho.shape) == np.array([Npix]*3))
+
+            if R_r.size > Npix**3:
+                raise ValueError("More bubbles than pixels...")
+
+
+            x1d = xx.ravel()
+            y1d = yy.ravel()
+            z1d = zz.ravel()
+
+            _rho_ = box_rho#smooth_box(box_rho, R=2, periodic=True).real
+            r1d = _rho_.ravel()
+
+            # Sort in order of descending bubble size and density
+            dsorter = np.argsort(r1d)[-1::-1]
+            R_r = np.sort(R_r)[-1::-1]
+
+            p_len = np.array([x1d[dsorter], y1d[dsorter], z1d[dsorter]]).T
+
+            x1d, y1d, z1d = p_len.T
+
+        else:
+            # Randomly generate (x, y, z) positions for all bubbles in cMpc units.
+            p_len = np.random.rand(num*3).reshape(num, 3) * Lbox
+
+            x1d = xx.ravel()
+            y1d = yy.ravel()
+            z1d = zz.ravel()
+
+
         # Get bubble positions in terms of array indices ('bin' = 'bin number')
         p_bin = np.digitize(p_len, bins) - 1
 
         # Initialize a box. We'll zero-out elements lying within bubbles below.
-        box = np.ones([binc.size]*3)
-        box_tot = np.zeros([binc.size]*3)
+        if slab is not None:
+            box = np.ones([binc.size, binc.size, Nz])
+            box_tot = np.zeros([binc.size, binc.size, Nz])
+        else:
+            box = np.ones([binc.size]*3)
+            box_tot = np.zeros([binc.size]*3)
 
         # Speed things up with a kdtree.
-        pos = np.array([xx.ravel(), yy.ravel(), zz.ravel()]).T
+        pos = np.array([x1d, y1d, z1d]).T
         kdtree = cKDTree(pos, boxsize=Lbox)
+
+        pb = ProgressBar(R_r.size, name=f"x(bb;Q={Q})")
+        pb.start()
 
         # Loop over bubbles and flag all cells within them
         for h in range(p_bin.shape[0]):
 
+            # Only happens if include_cross_corr=True
+            if h > R_r.size - 1:
+                break
+
+            pb.update(h)
+
             # Position of h'th bubble center in units of bin number, converted
             # to cMpc.
             p = p_bin[h] * vox
+
+            # If we're focusing on a narrow slab, skip if bubble isn't in it.
+            # Note: slab only along LOS.
+            if slab is not None:
+                beyond_zhi = (p[2] - R_r[h]) > slab
+
+                if beyond_zhi:
+                    continue
+
 
             ##
             # Speed-up with kdtree
@@ -398,9 +512,13 @@ class Box(BubbleModel):
                     box[i,j,k] = 0
                     box_tot[i,j,k] += 1
 
-        self._cache_box_['bubbles'][args] = box, box_tot
+        ion = 1 - box
 
-        return box, box_tot
+        self._cache_box_['bubbles'][args] = ion, box_tot
+
+        pb.finish()
+
+        return ion, box_tot
 
     def get_box_rand(self, box=None, Lbox=100., vox=1., Q=0.5, Qtol=1e-2,
         seed=None, **_kw_):

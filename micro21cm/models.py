@@ -56,17 +56,19 @@ except ImportError:
     rank = 0
     size = 1
 
+
+
 PATH = os.environ.get("MICRO21CM")
 
 class BubbleModel(object):
-    def __init__(self, bubbles=True, bubbles_ion=True,
+    def __init__(self, cosmology=None, bubbles=True, bubbles_ion=True,
         bubbles_pdf='lognormal', bubbles_model='fzh04',
         include_adiabatic_fluctuations=True, include_overlap_corr=0,
         include_cross_terms=1, include_rsd=1, include_mu_gt=-1.,
         use_volume_match=1, density_pdf='lognormal',
         Rmin=1e-2, Rmax=1e4, NR=1000, zrange=None,
         effective_grid=None, normalize_via_bmf=False, self_consistent_density=0,
-        omega_b=0.0486, little_h=0.67, omega_m=0.3089, ns=0.96,
+        omega_b=0.0486, hubble_0=0.67, omega_m=0.3089, ns=0.96,
         transfer_kmax=500., transfer_k_per_logint=11, zmin=0, zmax=20.,
         use_pbar=False, use_mcfit=True, mcfit_kwargs={}, approx_linear=True,
         kmin=1e-5, kmax=None, dlogk=0.05, verbose=True, debug=True, **_kw_):
@@ -148,6 +150,18 @@ class BubbleModel(object):
 
         Cosmology
         ---------
+        cosmology : instance [optional]
+            If supplied, must be an astropy.cosmology instance. In thise case,
+            values of cosmological parameters will be pulled from this object
+            rather than via the parameters `hubble_0`, `omega_b`, `omega_c`.
+        hubble_0 : float
+            Value of Hubble parameter today in units of 100 km/s/Mpc.
+        omega_b, omega_c : float
+            Density relative to critical in baryons and cold dark matter,
+            respectively (at z=0).
+
+        .. note :: Throughout, little h is implicit! i.e., wavenumbers `k`
+            are assumed to be h cMpc^-1, not just cMpc^-1.
 
 
         Transfer Functions
@@ -224,16 +238,27 @@ class BubbleModel(object):
              'zmax': zmax,
             }
 
+        # In this case, must be an astropy.cosmology instance
+        if cosmology is not None:
+            if verbose:
+                print("User-supplied astropy.cosmology instance will override hubble_0, omega_m, omega_b.")
+
+            hubble_0 = cosmology.h
+            omega_m = cosmology.Om0
+            omega_b = cosmology.Ob0
+        else:
+            pass
+
         omega_cdm = omega_m - omega_b
 
         self.cosmo_params = \
             {
-             'H0': little_h * 100.,
-             'ombh2': omega_b * little_h**2,
-             'omch2': omega_cdm * little_h**2,
+             'H0': hubble_0 * 100.,
+             'ombh2': omega_b * hubble_0**2,
+             'omch2': omega_cdm * hubble_0**2,
             }
 
-        H = little_h * 100. / km_per_mpc
+        H = hubble_0 * 100. / km_per_mpc
         _rho_c = (3. * H**2) / (8. * np.pi * G)
         self._rho_m = (omega_b + omega_cdm) * _rho_c * cm_per_mpc**3 \
             / g_per_msun
@@ -1129,8 +1154,8 @@ class BubbleModel(object):
                 r_in_R = not (r_too_lo or r_too_hi)
 
                 if not r_in_R:
-                    r = _R_.max() if r_too_hi else r_too_lo
-                    if rank == 0:
+                    r = _R_.max() if r_too_hi else _R_.min()
+                    if rank == 0 and self.verbose:
                         print("Smoothing scale outside tabulated range [z={},r={}]".format(z, r))
 
                 var = var_f(r)

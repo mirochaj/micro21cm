@@ -279,7 +279,7 @@ class BubbleModel(object):
     def _init_cosmology(self):
         kmax = self.transfer_params['kmax']
         k_per_logint = self.transfer_params['k_per_logint']
-        zs = self.zrange if self.zrange is not None else [0,5,8,10,12,15]
+        zs = self.zrange if self.zrange is not None else [0,5,8,10,12,15,25,50]
         pars = camb.CAMBparams()
         pars.set_cosmology(**self.cosmo_params)
         pars.InitPower.set_params(ns=self._ns)

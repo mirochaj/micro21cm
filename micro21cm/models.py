@@ -1628,6 +1628,226 @@ class BubbleModel(object):
                 Rmin=self.tab_R.min(), Rmax=self.tab_R.max())
 
         return ps
+        #begin halo model heating
+
+    def get_window(self, k, l=100):
+        """
+        Computes the normalized window function.
+        Note: May add a z dependence later
+        Does not need an off and on switch
+        Parameters:
+        ----------
+        k : numpy array[int, float]
+            Mode of interest
+        l : int, float
+            Mean-free-path of photon [in Mpc]
+
+        Returns
+        -------
+        W(k,l)
+
+        """
+        if type(k) != np.ndarray:
+            k = np.array([k])
+
+        return l**3 * np.arctan(k*l)/(k*l)
+
+    def get_bias(self, k, b, c):
+        return b*k + c
+
+
+    def get_Nx(self, nx=1, l=1):
+        """
+        Returns the number of heated sources centered in the effective
+        volume of l**3.
+        Parameters:
+        -----------
+        nx : int, float
+        Number density of identical heated sources. Units?
+        Tx : int, float
+        Heat deposited in a spherically symmetrical region
+        """
+        return nx*(l**3)
+
+    def get_fh(self, z, nx=1, Tx=1, l=1):
+        """
+        Returns the correlation of heated regions.
+        """
+        Nx = self.get_Nx(nx,l)
+        return (Nx * Tx)/(self.get_Tgas(z) + Nx * Tx)
+
+    def get_avg_T(self, z, nx=1, Tx=1, l=1):
+        """
+        Returns average temperature which has been assumed to equal
+        Ts.
+        """
+        Nx = self.get_Nx(nx,l)
+        return self.get_Tgas(z) + (Nx * Tx)
+
+    def get_1_halo(self, k, nx, l):
+        """
+        Returns 1 halo term of halo model.
+        """
+        Nx = self.get_Nx(nx,l)
+        ut = self.get_window(k, l)/l**3
+
+        return Nx**(-1) * ut**2
+
+    def get_2_halo(self, z, k, l, b, c):
+
+        """
+        Important note: the official 2-halo term is a scaling of the
+        linear density field but also needs to apply to adiabatic and cross terms.
+        Because of additional terms, this function is primarily used for testing
+        and is not called when calculating the PS. For calculating PS, the 2 halo
+        math is simply done within the ps function itself.
+        """
+        bx = self.get_bias(k,b,c)
+
+        ut = self.get_window(k,l)/l**3
+
+        return (bx**2 * ut**2) * self.get_ps_matter(z, k)
+
+
+    def get_ps_window(self, z, k, b=1, c=1 , nx=1, Tx=1, l=100):
+        """
+        Computes power spectrum of the 1/2 halo function modified
+        by the window function.
+
+        parameters
+            ----------
+        z : int, float
+            Redshift
+        k : int, float
+            Mode of interest [in h / Mpc].
+        b :int, float
+            Slope scale factor for scale bias
+        c :int, float
+            Axis offset for scale bias
+        nx : int, float
+            Number density of heated regions. Used to get Nx
+        Tx: identical heating from every source.
+        l : int, float
+            mean-free-path of photon [in Mpc]
+        Must be a single number. Cannot test as an array
+
+        Returns
+        -------
+        P(k)
+        """
+        #print("""get window is activated""")
+
+        T = self.get_avg_T(z,nx,Tx,l)
+        Tr = self.get_Tcmb(z)
+
+
+        ps_mm = self.get_ps_matter(z,k) * 2
+        phi = self.get_contrast(z,Ts=T)
+        T0 = self.get_dTb_bulk(z,Ts=T)
+        window = self.get_window(k=k,l=l)
+        #actual
+        ut = window/(l**3)
+
+        bx = self.get_bias(k, b, c)
+
+        beta = self.get_beta_T(z,Ts=T)
+        fh = self.get_fh(z,nx,Tx,l)
+        one_halo = self.get_1_halo(k,nx,l)
+
+        full_beta = ((1-fh) * beta) + (fh * bx * ut)
+        
+        #print("This is the matter spectrum ", ps_mm)
+
+        #full beta term includes two_halo term literally as I didn't 
+        #want to call the function itself because of a square issue.
+
+        return T0**2*(1 + phi**(-1)*(Tr/T)*full_beta)**2 * ps_mm + \
+        T0**2*phi**(-2)*(Tr/T)**2*fh**2*one_halo
+
+# This is the old single bias version. Keep now for testing
+
+    def bias_ps_window(self, z, k, bx=1, nx=1, Tx=1, l=100):
+
+        #print("""get window is activated""")
+
+        T = self.get_avg_T(z,nx,Tx,l)
+        Tr = self.get_Tcmb(z)
+
+
+        ps_mm = self.get_ps_matter(z,k) * 2
+        phi = self.get_contrast(z,Ts=T)
+        T0 = self.get_dTb_bulk(z,Ts=T)
+        window = self.get_window(k=k,l=l)
+        #actual
+        ut = window/(l**3)
+
+        beta = self.get_beta_T(z,Ts=T)
+        fh = self.get_fh(z,nx,Tx,l)
+        one_halo = self.get_1_halo(k,nx,l)
+
+        full_beta = ((1-fh) * beta) + (fh * bx * ut)
+        
+        #print("This is the matter spectrum ", ps_mm)
+
+        #full beta term includes two_halo term literally as I didn't 
+        #want to call the function itself because of a square issue.
+
+        return T0**2*(1 + phi**(-1)*(Tr/T)*full_beta)**2 * ps_mm + \
+        T0**2*phi**(-2)*(Tr/T)**2*fh**2*one_halo
+
+    def test_get_Tx(self, z, Ts, nx=1, l=1):
+
+        Nx = self.get_Nx(nx,l)
+        return (Ts - self.get_Tgas(z)) / (Nx)
+    
+#Reverse engineers and Takes Ts as an input and spits out Tx
+
+    def test_ps_window(self, z, k, Ts, bx = 1, nx=1, l=100):
+        """
+        Computes power spectrum of the 1/2 halo function modified
+        by the window function.
+
+        parameters
+        ----------
+        z : int, float
+            Redshift
+        k : int, float
+            Mode of interest [in h / Mpc].
+        bx :int, float
+            bias factor for 2 halo term.
+        nx : int, float
+            Number density of heated regions. Used to get Nx
+            Tx: identical heating from every source.
+            l : int, float
+        mean-free-path of photon [in Mpc]
+        Must be a single number. Cannot test as an array
+
+        Returns
+        -------
+        P(k)
+        """
+
+        Tx = self.test_get_Tx(z,nx,Ts,l)
+        Tr = self.get_Tcmb(z)
+
+
+        ps_mm = self.get_ps_matter(z,k) * 2
+        phi = self.get_contrast(z,Ts=Ts)
+        T0 = self.get_dTb_bulk(z,Ts=Ts)
+        window = self.get_window(k=k,l=l)
+        #actual
+        ut = window/(l**3)
+
+        beta = self.get_beta_T(z,Ts=Ts)
+        fh = self.get_fh(z,nx,Tx,l)
+        one_halo = self.get_1_halo(k,nx,l)
+
+        full_beta = ((1-fh) * beta) + (fh * bx * ut)
+
+    #full beta term includes two_halo term
+
+        return T0**2*(1 + phi**(-1)*(Tr/Ts)*full_beta)**2 * ps_mm + \
+        T0**2*phi**(-2)*(Tr/Ts)**2*fh**2*one_halo
 
     def get_ps_21cm(self, z, k, Q=0.0, Ts=np.inf, R=5., sigma=1,
         gamma=0., alpha=0., Asys=1., xi_bb=None, delta_ion=0.):
@@ -1887,3 +2107,4 @@ class BubbleModel(object):
             kw['R'] = Ts
 
         return kw
+

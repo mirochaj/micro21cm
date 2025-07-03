@@ -1130,7 +1130,7 @@ class BubbleModel(object):
 
                 if not r_in_R:
                     r = _R_.max() if r_too_hi else r_too_lo
-                    if rank == 0:
+                    if rank == 0 and self.verbose:
                         print("Smoothing scale outside tabulated range [z={},r={}]".format(z, r))
 
                 var = var_f(r)
